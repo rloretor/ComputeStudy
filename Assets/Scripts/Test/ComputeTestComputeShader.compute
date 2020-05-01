@@ -1,0 +1,18 @@
+﻿#pragma kernel CSMain
+#define GSX 32
+#define GSY 32
+
+RWTexture2D<float4> Result;
+uint2 RTSize;
+
+[numthreads(GSX,GSY,1)]
+void CSMain (uint3 id: SV_DispatchThreadID/*,uint3 ThreadID : SV_GroupThreadID, uint3 groupID:SV_GroupID*/)
+{
+    /*int column = (groupID.x * GSX) + ThreadID.x;
+    int row = (groupID.y * GSY) + ThreadID.y;
+    uint2 id = uint2(column,row);*/
+    if(id.x>=RTSize.x || id.y>=RTSize.y){
+     return;
+    }
+    Result[id.xy] = float4(id.xy/RTSize.xy,0,0);
+}
