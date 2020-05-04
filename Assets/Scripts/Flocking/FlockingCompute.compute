@@ -1,0 +1,23 @@
+﻿// Each #kernel tells which function to compile; you can have many kernels
+#pragma kernel FlockingKernel
+
+struct BoidData{
+    float4 position;
+    float4 velocity;
+};
+
+RWStructuredBuffer<BoidData> _BoidsBuffer;
+uniform float _DeltaTime;
+uniform uint _Instances;
+[numthreads(64,1,1)]
+void FlockingKernel (uint3 id : SV_DispatchThreadID)
+{
+   if(id.x>=_Instances )
+   {
+    return;
+   }
+  BoidData boid = _BoidsBuffer[id.x];
+  boid.position.xyz = boid.position.xyz + boid.velocity.xyz *boid.velocity.w* _DeltaTime;
+  _BoidsBuffer[id.x] = boid;
+  
+}
