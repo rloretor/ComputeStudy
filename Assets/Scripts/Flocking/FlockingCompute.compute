@@ -1,23 +1,107 @@
-﻿// Each #kernel tells which function to compile; you can have many kernels
-#pragma kernel FlockingKernel
-
+﻿#pragma kernel FlockingKernel
 struct BoidData{
-    float4 position;
-    float4 velocity;
+    float3 position;
+    float3 velocity;
 };
 
 RWStructuredBuffer<BoidData> _BoidsBuffer;
+
 uniform float _DeltaTime;
-uniform uint _Instances;
+
+cbuffer once {
+  float _Radius;
+  float _MaxSpeed;
+  float _MaxForce;
+  uint _Instances;
+  uint _MassPerUnit;
+  float3 _MaxBound;
+  float3 _MinBound;
+};
+float3 ClampPointToBounds(float3 p)
+{
+return clamp(p, _MinBound, _MaxBound);
+}
+float aMod(float a, float n)
+{
+    return a - n * floor(a / n);
+}
+float ReflectCube(float val, float min, float max)
+{
+    float E = max - min;
+    float R = (min + aMod((val - min), E));
+    float t = aMod(ceil((val - min) / E), 2.0);
+    return R * (2.0 * t - 1.0) + (max + min) * (1 - t);
+}
+float3 ReflectPointInBounds(float3 p)
+{
+    float x = ReflectCube(p.x, _MinBound.x, _MaxBound.x);
+    float y = ReflectCube(p.y, _MinBound.y, _MaxBound.y);
+    float z = ReflectCube(p.z, _MinBound.z, _MaxBound.z);
+    return float3(x, y, z);
+}
+//https://twitter.com/_Humus_/status/1074973351276371968?s=20
+bool IsNaN(float x)
+{
+    return (asuint(x) & 0x7FFFFFFF) > 0x7F800000;
+}
+
 [numthreads(64,1,1)]
 void FlockingKernel (uint3 id : SV_DispatchThreadID)
 {
-   if(id.x>=_Instances )
+   if(id.x >=_Instances )
    {
     return;
    }
   BoidData boid = _BoidsBuffer[id.x];
-  boid.position.xyz = boid.position.xyz + boid.velocity.xyz *boid.velocity.w* _DeltaTime;
+  float sepLength,weight,currentForce,currentSpeed;
+  float ForceInteractions = _Instances;
+  float3 FRep, FAtt ,FAli,FTotal,Acceleration,Velocity,reflectedPos,position = 0;
+  for (uint bn = 0; bn < _Instances; bn++)
+  {
+    BoidData neighbour = _BoidsBuffer[bn];
+    float3 sepDir = boid.position - neighbour.position;
+    sepLength = max(length(sepDir), 0.0001f);
+    weight = sepLength /_Radius;
+    ForceInteractions -= weight > 1;
+    weight = 1 - min(weight, 1);
+    FRep += (sepDir / sepLength) * weight * _MaxForce;
+    FAtt += neighbour.position * weight;
+    FAli += neighbour.velocity * weight;
+  }
+  if (ForceInteractions > 0)
+  {
+     FRep /= ForceInteractions;
+     FAtt /= ForceInteractions;
+     FAtt -= boid.position;
+     FAtt = normalize(FAtt) * _MaxForce;
+     FAli = normalize(FAli) * _MaxForce;
+   }
+    
+  FTotal = FAtt + FAli + FRep;
+  if(IsNaN(FTotal.x) ||IsNaN(FTotal.y)  ||IsNaN(FTotal.z) )
+  {
+    FTotal = boid.velocity;
+  }
+  currentForce = max(length(FTotal), 0.000001f);
+  FTotal = FTotal / currentForce * min(currentForce, _MaxForce);
+  Acceleration = FTotal / _MassPerUnit;
+  Velocity = boid.velocity + Acceleration * _DeltaTime;
+  currentSpeed = max(length(Velocity), 0.00001f);
+  Velocity = Velocity / currentSpeed * min(currentSpeed, _MaxSpeed);
+  position = boid.position + Velocity * _DeltaTime;
+  reflectedPos = ReflectPointInBounds(position);
+  boid.velocity = normalize(reflectedPos - boid.position) * min(currentSpeed, _MaxSpeed);
+  boid.position = ClampPointToBounds(position);
+  
+ 
   _BoidsBuffer[id.x] = boid;
   
 }
+
+[numthreads(64,1,1)]
+void KinematicKernel (uint3 id : SV_DispatchThreadID)
+{
+}
+
+
+

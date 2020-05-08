@@ -6,15 +6,17 @@ using Random = UnityEngine.Random;
 
 public struct BoidData
 {
-    public Vector4 position;
-    public Vector4 velocity;
+    public Vector3 position;
+    public Vector3 velocity;
 }
 
 [Serializable]
 public class BoidModel
 {
-    public Vector3 MinSpeed;
-    public Vector3 MaxSpeed;
+    public float massPerUnit;
+    public float MaxForce;
+    public float MaxSpeed;
+    public float Radius;
 }
 
 public class FlockingCompute : MonoBehaviour
@@ -33,23 +35,29 @@ public class FlockingCompute : MonoBehaviour
         InitBuffers();
     }
 
+    private void OnDrawGizmos()
+    {
+        Gizmos.color = new Color(0.2f, 0.2f, 0.2f, 0.2f);
+        Gizmos.DrawCube(boidBounds.center, boidBounds.size);
+    }
+
     void Update()
     {
         Dispatch();
 
         BoidData[] fetchBoids = new BoidData[instances];
         boidBuffer.GetData(fetchBoids);
-        for (var index = 1; index < fetchBoids.Length; index++)
+        Debug.Log(fetchBoids[0].position);
+        for (var index = 0; index < fetchBoids.Length; index++)
         {
             var a = fetchBoids[index];
-            Debug.DrawLine(fetchBoids[index - 1].position, fetchBoids[index].position);
+            Debug.DrawLine(a.position, a.position + a.velocity.normalized, Color.black);
         }
     }
 
     private void Dispatch()
     {
         flockingShader.SetFloat("_DeltaTime", Time.deltaTime);
-        flockingShader.SetInt("_Instances", instances);
         int TG = Mathf.CeilToInt((float) instances / GroupSize);
         flockingShader.Dispatch(kernel, TG, 1, 1);
     }
@@ -62,8 +70,21 @@ public class FlockingCompute : MonoBehaviour
         Debug.Log(boidByteSize);
         boidBuffer = new ComputeBuffer(instances, boidByteSize);
         boidBuffer.SetData(boidsList.ToArray());
+
         kernel = flockingShader.FindKernel("FlockingKernel");
         flockingShader.SetBuffer(kernel, "_BoidsBuffer", boidBuffer);
+        InitConstantBuffer();
+    }
+
+    private void InitConstantBuffer()
+    {
+        flockingShader.SetInt("_Instances", instances);
+        flockingShader.SetFloat("_Radius", boidModel.Radius);
+        flockingShader.SetFloat("_MaxSpeed", boidModel.MaxSpeed);
+        flockingShader.SetFloat("_MaxForce", boidModel.MaxForce);
+        flockingShader.SetInt("_MassPerUnit", 1);
+        flockingShader.SetVector("_MaxBound", boidBounds.max);
+        flockingShader.SetVector("_MinBound", boidBounds.min);
     }
 
     private void PopulateBoids()
@@ -96,18 +117,5 @@ public class FlockingCompute : MonoBehaviour
     private void OnDisable()
     {
         Dispose();
-    }
-}
-
-
-public static class BoundsExtensions
-{
-    public static Vector3 RandomPointInBounds(this Bounds bounds)
-    {
-        return new Vector3(
-            Random.Range(bounds.min.x, bounds.max.x),
-            Random.Range(bounds.min.y, bounds.max.y),
-            Random.Range(bounds.min.z, bounds.max.z)
-        );
     }
 }
