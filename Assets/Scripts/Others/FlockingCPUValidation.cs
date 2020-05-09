@@ -16,10 +16,6 @@ public class FlockingCPUValidation : MonoBehaviour
         PopulateBoids();
     }
 
-    // Update is called once per frame
-    void Update()
-    {
-    }
 
     private void OnDrawGizmos()
     {
@@ -40,24 +36,35 @@ public class FlockingCPUValidation : MonoBehaviour
                     Vector3 sepDir = boid.position - neighbour.position;
                     float sepLength = Mathf.Max(sepDir.magnitude, 0.00000001f);
                     float weight = sepLength / boidModel.Radius;
-                    ForceInteractions -= (weight > 1 ? 1 : 0);
+                    ForceInteractions -= ((weight > 1 || sepLength < 0.00001f) ? 1 : 0);
                     weight = 1 - Mathf.Min(weight, 1);
                     FRep += (sepDir / sepLength) * weight * boidModel.MaxForce;
-                    FAtt += neighbour.position * weight;
+                    if (weight != 0)
+                    {
+                        Gizmos.color = Color.cyan;
+                        Gizmos.DrawLine(boid.position, neighbour.position);
+                    }
+
+                    FAtt += neighbour.position * Mathf.Ceil(weight);
                     FAli += neighbour.velocity * weight;
                 }
 
+                Vector3 FTotal = boid.velocity;
                 if (ForceInteractions > 0)
                 {
                     FRep /= ForceInteractions;
-                    FAtt /= ForceInteractions;
-                    FAtt -= boid.position;
-                    FAtt = FAtt.normalized * boidModel.MaxForce;
+                    FAtt /= (ForceInteractions + 1);
+                    Gizmos.color = Color.yellow;
+                    Gizmos.DrawLine(boid.position, FAtt);
+                    FAtt = FAtt - boid.position;
+                    FAtt = FAtt.normalized * boidModel.MaxForce * 0.9f;
+                    Gizmos.color = new Color(0, 0, 1, 0.2f);
+                    Gizmos.DrawLine(boid.position, boid.position + FAtt);
                     FAli = FAli.normalized * boidModel.MaxForce;
+                    FTotal = FAtt; //+ FAli + FRep;
                 }
 
-                Vector3 FTotal = FAtt + FAli + FRep;
-                
+
                 float currentForce = Mathf.Max(FTotal.magnitude, 0.000001f);
                 FTotal = FTotal / currentForce * Mathf.Min(currentForce, boidModel.MaxForce);
                 Vector3 Acceleration = FTotal / boidModel.massPerUnit;

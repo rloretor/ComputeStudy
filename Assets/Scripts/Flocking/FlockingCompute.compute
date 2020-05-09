@@ -1,10 +1,14 @@
 ﻿#pragma kernel FlockingKernel
+#pragma kernel KinematicKernel
 struct BoidData{
     float3 position;
+    float scale;
     float3 velocity;
+    float dummy;
 };
 
 RWStructuredBuffer<BoidData> _BoidsBuffer;
+RWStructuredBuffer<float3> _BoidsNetForces;
 
 uniform float _DeltaTime;
 
@@ -17,6 +21,8 @@ cbuffer once {
   float3 _MaxBound;
   float3 _MinBound;
 };
+
+float3 _ForceWeights;
 float3 ClampPointToBounds(float3 p)
 {
 return clamp(p, _MinBound, _MaxBound);
@@ -40,12 +46,12 @@ float3 ReflectPointInBounds(float3 p)
     return float3(x, y, z);
 }
 //https://twitter.com/_Humus_/status/1074973351276371968?s=20
-bool IsNaN(float x)
+bool IsNaN(float3 x)
 {
     return (asuint(x) & 0x7FFFFFFF) > 0x7F800000;
 }
 
-[numthreads(64,1,1)]
+[numthreads(256,1,1)]
 void FlockingKernel (uint3 id : SV_DispatchThreadID)
 {
    if(id.x >=_Instances )
@@ -55,52 +61,59 @@ void FlockingKernel (uint3 id : SV_DispatchThreadID)
   BoidData boid = _BoidsBuffer[id.x];
   float sepLength,weight,currentForce,currentSpeed;
   float ForceInteractions = _Instances;
-  float3 FRep, FAtt ,FAli,FTotal,Acceleration,Velocity,reflectedPos,position = 0;
-  for (uint bn = 0; bn < _Instances; bn++)
+  float3 FRep,FAtt ,FAli=0;
+
+  [fastopt]for (uint bn = 0; bn < _Instances; bn++)
   {
     BoidData neighbour = _BoidsBuffer[bn];
     float3 sepDir = boid.position - neighbour.position;
     sepLength = max(length(sepDir), 0.0001f);
     weight = sepLength /_Radius;
-    ForceInteractions -= weight > 1;
-    weight = 1 - min(weight, 1);
+    ForceInteractions -= weight > 1 || sepLength < 0.00001f;
+    weight = 1.0f - min(weight, 1.0f);
     FRep += (sepDir / sepLength) * weight * _MaxForce;
-    FAtt += neighbour.position * weight;
+    FAtt += neighbour.position * ceil(weight);
     FAli += neighbour.velocity * weight;
   }
-  if (ForceInteractions > 0)
-  {
-     FRep /= ForceInteractions;
-     FAtt /= ForceInteractions;
-     FAtt -= boid.position;
-     FAtt = normalize(FAtt) * _MaxForce;
-     FAli = normalize(FAli) * _MaxForce;
-   }
+  float3 FTotal = boid.velocity*0.001f;
     
-  FTotal = FAtt + FAli + FRep;
-  if(IsNaN(FTotal.x) ||IsNaN(FTotal.y)  ||IsNaN(FTotal.z) )
-  {
-    FTotal = boid.velocity;
-  }
+   FRep /= max(ForceInteractions,0.000001f);
+   FAtt /= (ForceInteractions + 1);
+   FAtt -= boid.position;
+   FAtt = normalize(FAtt) * _MaxForce;
+   FAtt  =IsNaN(FAtt)?FTotal:FAtt;
+   FAli = normalize(FAli) * _MaxForce;
+   
+  boid.dummy =exp( ForceInteractions/_Instances * 0.0001);
+  FTotal = FRep*_ForceWeights.x +FAtt*_ForceWeights.y+FAli*_ForceWeights.z;
+  FTotal/=(_ForceWeights.x+_ForceWeights.y+_ForceWeights.z);
   currentForce = max(length(FTotal), 0.000001f);
   FTotal = FTotal / currentForce * min(currentForce, _MaxForce);
-  Acceleration = FTotal / _MassPerUnit;
-  Velocity = boid.velocity + Acceleration * _DeltaTime;
-  currentSpeed = max(length(Velocity), 0.00001f);
-  Velocity = Velocity / currentSpeed * min(currentSpeed, _MaxSpeed);
-  position = boid.position + Velocity * _DeltaTime;
-  reflectedPos = ReflectPointInBounds(position);
-  boid.velocity = normalize(reflectedPos - boid.position) * min(currentSpeed, _MaxSpeed);
-  boid.position = ClampPointToBounds(position);
-  
- 
+  _BoidsNetForces[id.x] =FTotal;
   _BoidsBuffer[id.x] = boid;
   
 }
 
-[numthreads(64,1,1)]
+[numthreads(256,1,1)]
 void KinematicKernel (uint3 id : SV_DispatchThreadID)
 {
+   if(id.x >=_Instances )
+   {
+    return;
+   }
+
+  BoidData boid = _BoidsBuffer[id.x];
+ float3 FTotal   =  _BoidsNetForces[id.x];
+ float3 Acceleration = FTotal / (_MassPerUnit*boid.scale);
+ float3 Velocity = boid.velocity + Acceleration * _DeltaTime;
+ float3 currentSpeed = max(length(Velocity), 0.00001f);
+ Velocity = Velocity / currentSpeed * min(currentSpeed, _MaxSpeed);
+ float3 position = boid.position + Velocity * _DeltaTime;
+ float3 reflectedPos = ReflectPointInBounds(position);
+ boid.velocity = normalize(reflectedPos - boid.position) * min(currentSpeed, _MaxSpeed);
+ boid.position =  ClampPointToBounds(position);
+ _BoidsBuffer[id.x] =boid  ;
+
 }
 
 
