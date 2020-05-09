@@ -23,7 +23,7 @@ public class BoidModel
 
 public class FlockingCompute : MonoBehaviour
 {
-    private const int GroupSize = 256;
+    private const int GroupSize = 512;
 
     [Header("Compute Buffer stuff")] [SerializeField]
     private int instances;
@@ -36,6 +36,8 @@ public class FlockingCompute : MonoBehaviour
     private List<Vector3> boidsForcesList = new List<Vector3>();
     private ComputeBuffer boidBuffer;
     private ComputeBuffer boidForcesBuffer;
+    private ComputeBuffer IncirectArgsThreadGroup;
+    private int[] IndirectComputeArgs;
     private int FlockingKernel;
     private int KinematicKernel;
 
@@ -123,15 +125,14 @@ public class FlockingCompute : MonoBehaviour
     private void Dispatch()
     {
         flockingShader.SetFloat("_DeltaTime", Time.deltaTime);
-        flockingShader.SetVector("_ForceWeights", new Vector3(SeparationWeight,CohesionWeight, AlignWeight));
-        int TG = Mathf.CeilToInt((float) instances / GroupSize);
+        flockingShader.SetVector("_ForceWeights", new Vector3(SeparationWeight, CohesionWeight, AlignWeight));
 
         if (Time.frameCount % 2 == 0)
         {
-            flockingShader.Dispatch(FlockingKernel, TG, 1, 1);
+            flockingShader.DispatchIndirect(FlockingKernel, IncirectArgsThreadGroup);
         }
 
-        flockingShader.Dispatch(KinematicKernel, TG, 1, 1);
+        flockingShader.DispatchIndirect(KinematicKernel, IncirectArgsThreadGroup);
     }
 
 
@@ -144,6 +145,10 @@ public class FlockingCompute : MonoBehaviour
 
         boidForcesBuffer = new ComputeBuffer(instances, sizeof(float) * 3);
         boidForcesBuffer.SetData(boidsForcesList.ToArray());
+        int TG = Mathf.CeilToInt((float) instances / GroupSize);
+        IndirectComputeArgs = new[] {TG, 1, 1};
+        IncirectArgsThreadGroup = new ComputeBuffer(1, sizeof(int) * 3, ComputeBufferType.IndirectArguments);
+        IncirectArgsThreadGroup.SetData(IndirectComputeArgs);
 
         FlockingKernel = flockingShader.FindKernel("FlockingKernel");
         KinematicKernel = flockingShader.FindKernel("KinematicKernel");
@@ -183,10 +188,12 @@ public class FlockingCompute : MonoBehaviour
 
     private void Dispose()
     {
-        boidBuffer.Release();
-        boidForcesBuffer.Release();
+        boidBuffer?.Release();
+        boidForcesBuffer?.Release();
         // BufferWithArgs.Release();
         // args = null;
+        IncirectArgsThreadGroup?.Release();
+        IndirectComputeArgs = null;
         this.boidsList = null;
         this.boidsForcesList = null;
         Destroy(BoidDrawMaterial);

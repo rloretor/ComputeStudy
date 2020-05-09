@@ -51,7 +51,7 @@ bool IsNaN(float3 x)
     return (asuint(x) & 0x7FFFFFFF) > 0x7F800000;
 }
 
-[numthreads(256,1,1)]
+[numthreads(512,1,1)]
 void FlockingKernel (uint3 id : SV_DispatchThreadID)
 {
    if(id.x >=_Instances )
@@ -61,23 +61,24 @@ void FlockingKernel (uint3 id : SV_DispatchThreadID)
   BoidData boid = _BoidsBuffer[id.x];
   float sepLength,weight,currentForce,currentSpeed;
   float ForceInteractions = _Instances;
-  float3 FRep,FAtt ,FAli=0;
+  float3 FRep=0,FAtt=0 ,FAli=0;
 
-  [fastopt]for (uint bn = 0; bn < _Instances; bn++)
+#define E 0.0000001
+  [loop]for (uint bn = 0; bn < _Instances; bn++)
   {
     BoidData neighbour = _BoidsBuffer[bn];
     float3 sepDir = boid.position - neighbour.position;
-    sepLength = max(length(sepDir), 0.0001f);
+    sepLength = max(length(sepDir),E);
     weight = sepLength /_Radius;
-    ForceInteractions -= weight > 1 || sepLength < 0.00001f;
+    ForceInteractions -= weight > 1 || sepLength <= E;
     weight = 1.0f - min(weight, 1.0f);
     FRep += (sepDir / sepLength) * weight * _MaxForce;
     FAtt += neighbour.position * ceil(weight);
     FAli += neighbour.velocity * weight;
   }
-  float3 FTotal = boid.velocity*0.001f;
+  float3 FTotal = boid.velocity*E;
     
-   FRep /= max(ForceInteractions,0.000001f);
+   FRep /= max(ForceInteractions,E);
    FAtt /= (ForceInteractions + 1);
    FAtt -= boid.position;
    FAtt = normalize(FAtt) * _MaxForce;
@@ -94,7 +95,7 @@ void FlockingKernel (uint3 id : SV_DispatchThreadID)
   
 }
 
-[numthreads(256,1,1)]
+[numthreads(512,1,1)]
 void KinematicKernel (uint3 id : SV_DispatchThreadID)
 {
    if(id.x >=_Instances )
