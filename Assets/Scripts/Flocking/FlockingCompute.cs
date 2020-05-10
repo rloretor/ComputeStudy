@@ -158,6 +158,7 @@ public class FlockingCompute : MonoBehaviour
     private void Dispatch()
     {
         flockingShader.SetFloat("_DeltaTime", Time.deltaTime);
+        flockingShader.SetFloat("_Time", Time.time);
         flockingShader.SetVector("_ForceWeights", new Vector3(SeparationWeight, CohesionWeight, AlignWeight));
         BoidDrawMaterial.SetFloat("_SphereRadius", ParticleSize / 2.0f);
         if (isbillboard)
