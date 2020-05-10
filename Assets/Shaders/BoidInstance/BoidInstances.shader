@@ -32,23 +32,26 @@ Blend One Zero // Premultiplied transparency
             };
 
             StructuredBuffer<BoidData> _BoidsBuffer;
+            float _SphereRadius;
+            uint _Instances;
 
             struct appdata
             {
                 float4 vertex : POSITION;
-                float2 uv : TEXCOORD0;
                 float4 normal:NORMAL;
+                float2 uv : TEXCOORD0;
                
             };
 
             struct v2f
             {
-                float2 uv : TEXCOORD0;
                 float4 vertex : SV_POSITION;
                 float4 color :COLOR0;
                 float3 wPos : TEXCOORD1;
                 float3 sphereWPos: TEXCOORD2;
                 float3 rayD: TEXCOORD3;
+                float3 N:TEXCOORD4;
+                float2 uv : TEXCOORD0;
                 
             };
 
@@ -64,28 +67,42 @@ Blend One Zero // Premultiplied transparency
                         0,0,0,1
                 );
             }   
+            float3 hash3( float3 p ){
+                float3 q = float3(  dot(p,float3(127.1,311.7,234.916)), 
+                			        dot(p,float3(269.5,183.3,511.5234)), 
+                			        dot(p,float3(419.2,371.9,8732.324998)) );
+                return frac(sin(q)*43758.5453);
+            }
             
-            float _SphereRadius;
+            float3 pal( in float t, in float3 a, in float3 b, in float3 c, in float3 d )
+            {
+                return a + b*cos( 6.28318*(c*t+d) );
+            }
+            #define BOIDPALETTE(p) pal( p, float3(0.8,0.5,0.4),float3(0.2,0.4,0.2),float3(2.0,1.0,1.0),float3(0.0,0.25,0.25) )
+            #define Rot(a)  float2x2(cos(a), sin(a),-sin(a), cos(a))
             v2f vert (appdata v, uint instanceID : SV_InstanceID)
             {
                 v2f o;
                 BoidData boid = _BoidsBuffer[instanceID];
+               
                 #ifdef ISBILLBOARD
                 float3 localSpaceCameraPos = mul(unity_WorldToObject, float4(_WorldSpaceCameraPos.xyz, 1));            
                 float3 camVect = normalize(boid.position - localSpaceCameraPos);
                 float4x4 rot =lookAtMatrix( v.vertex  - localSpaceCameraPos,float3(0,1,0));
-                #else
+                v.vertex.xyz*=(_SphereRadius+boid.scale);
+                #else         
                 float4x4 rot =lookAtMatrix( boid.velocity,float3(0,1,0));
+                v.vertex.xy = mul(Rot(lerp(-45,45,boid.dummy)*0.01745329252),v.vertex.xy);
+                o.N =  mul(rot,v.normal);
+                 v.vertex.xyz*=(_SphereRadius*boid.scale);
                 #endif
-                v.vertex.xyz;
-                v.vertex.xyz*=5;
                 v.vertex  = mul(rot,v.vertex);
                 v.vertex.xyz += boid.position;
                 
                 o.wPos = v.vertex;
                 o.sphereWPos = boid.position;
                 o.rayD = (o.wPos -_WorldSpaceCameraPos.xyz);
-                o.color = boid.scale;
+                o.color = float4(boid.scale,boid.dummy,instanceID,0);
                 o.vertex = mul(UNITY_MATRIX_VP,v.vertex);
                 o.uv =v.uv;
                 return o;
@@ -103,18 +120,17 @@ Blend One Zero // Premultiplied transparency
             fixed4 frag (v2f i) : SV_Target
             {
                 float2 uv =  i.uv *2 -1;
-                float3 D = normalize(i.rayD);
-                float d =  sphere(_WorldSpaceCameraPos.xyz,D,i.sphereWPos,_SphereRadius*i.color);
-               
-                if(d<0){
-                discard;
-                }
-                float3 p = _WorldSpaceCameraPos.xyz+  D * d;
-                float3 N = normalize( p -i.sphereWPos  );
-                float f= smoothstep(0,1,1- length(uv));
-                float3 L = _WorldSpaceLightPos0;
+                float3 N = normalize(i.N);
+                  #ifdef ISBILLBOARD
+                    float3 D = normalize(i.rayD);
+                    float d =  sphere(_WorldSpaceCameraPos.xyz,D,i.sphereWPos,_SphereRadius);
+                    clip(d);
+                    float3 p = _WorldSpaceCameraPos.xyz+  D * d;
+                    N = normalize( p -i.sphereWPos);
+                #endif
                 
-                return float4(N,1);
+                float3 L = _WorldSpaceLightPos0;
+                return float4(dot(N,L) * BOIDPALETTE(i.color.z/_Instances) ,1);
             }
             ENDCG
         }

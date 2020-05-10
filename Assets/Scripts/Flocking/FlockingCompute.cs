@@ -141,6 +141,9 @@ public class FlockingCompute : MonoBehaviour
     void Update()
     {
         Dispatch();
+#if UNITY_EDITOR
+        InitConstantBuffer();
+#endif
 
         //BoidData[] fetchBoids = new BoidData[instances];
         //boidBuffer.GetData(fetchBoids);
@@ -156,17 +159,16 @@ public class FlockingCompute : MonoBehaviour
     {
         flockingShader.SetFloat("_DeltaTime", Time.deltaTime);
         flockingShader.SetVector("_ForceWeights", new Vector3(SeparationWeight, CohesionWeight, AlignWeight));
-
+        BoidDrawMaterial.SetFloat("_SphereRadius", ParticleSize / 2.0f);
         if (isbillboard)
         {
             BoidDrawMaterial.EnableKeyword("ISBILLBOARD");
-            BoidDrawMaterial.SetFloat("_SphereRadius", ParticleSize/2.0f);
         }
         else
         {
             BoidDrawMaterial.DisableKeyword("ISBILLBOARD");
         }
-        
+
 
         if (Time.frameCount % 2 == 0)
         {
@@ -182,10 +184,12 @@ public class FlockingCompute : MonoBehaviour
     private void InitConstantBuffer()
     {
         flockingShader.SetInt("_Instances", instances);
+        BoidDrawMaterial.SetInt("_Instances", instances);
+
         flockingShader.SetFloat("_Radius", boidModel.Radius);
         flockingShader.SetFloat("_MaxSpeed", boidModel.MaxSpeed);
         flockingShader.SetFloat("_MaxForce", boidModel.MaxForce);
-        flockingShader.SetInt("_MassPerUnit", 1);
+        flockingShader.SetInt("_MassPerUnit", (int) boidModel.MassPerUnit);
         flockingShader.SetVector("_MaxBound", boidBounds.max);
         flockingShader.SetVector("_MinBound", boidBounds.min);
     }
