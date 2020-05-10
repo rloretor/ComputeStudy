@@ -133,23 +133,27 @@ void KinematicKernel (uint3 id : SV_DispatchThreadID)
 
    BoidData boid = _BoidsBuffer[id.x];
    float3 Vector   =  _BoidsNetForces[id.x] ; // ForceVector
-   float scaleWeight =2*exp(-boid.scale);
-  // scaleWeight =smoothstep(0,1,scaleWeight);
-    boid.dummy=scaleWeight;
+
+    boid.dummy=1+2*exp(-boid.scale);
+
    float currentMagnitude = max(length(Vector), E); 
    Vector = (Vector / currentMagnitude) ;
-   Vector = Vector * min(currentMagnitude, _MaxForce *(1+scaleWeight));
+   Vector = Vector * min(currentMagnitude, _MaxForce *  boid.dummy);
    
-   float3 Acceleration = Vector / (_MassPerUnit*boid.scale);
+   Vector = Vector / (_MassPerUnit*boid.scale); //Acceleration vector
   
-   Vector = boid.velocity + Acceleration * _DeltaTime; // VelocityVector
+   Vector = boid.velocity + Vector * _DeltaTime; // Velocity Vector
    currentMagnitude = max(length(Vector), E);
-   Vector = Vector / currentMagnitude * min(currentMagnitude, _MaxSpeed *(1+scaleWeight));
-   float3 position = boid.position + Vector  * _DeltaTime;
+   Vector = Vector / currentMagnitude * min(currentMagnitude, _MaxSpeed *  boid.dummy);
    
+   float3 position = boid.position + Vector  * _DeltaTime;
    Vector = ReflectPointInBounds(position);
-   boid.velocity = normalize( Vector - boid.position) * min(currentMagnitude, _MaxSpeed*(1+scaleWeight));
-   boid.position =  ClampPointToBounds(position);
+   
+   currentMagnitude =  min(currentMagnitude, _MaxSpeed*  boid.dummy);
+   Vector = normalize( Vector - boid.position) ; //reflected direction
+   boid.dummy = smoothstep(-1,1, dot(Vector, normalize(boid.velocity))); 
+   boid.velocity =Vector * currentMagnitude;
+   boid.position =  ReflectPointInBounds(position);
 
    _BoidsBuffer[id.x] =boid  ;
 

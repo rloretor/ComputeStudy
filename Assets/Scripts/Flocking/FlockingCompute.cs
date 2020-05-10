@@ -43,11 +43,11 @@ public class FlockingCompute : MonoBehaviour
     private int KinematicKernel;
     private int ThreadGroupSize;
 
-    [Space, Header("Parametrizable behavior"), Range(1, 10), SerializeField,]
-    private float SeparationWeight;
+    [Space, Header("Parametrizable behavior"), Range(0.1f, 1.5f), SerializeField,]
+    private float SeparationWeight = 1;
 
-    [SerializeField, Range(1, 10)] private float CohesionWeight;
-    [SerializeField, Range(1, 10)] private float AlignWeight;
+    [SerializeField, Range(0.1f, 1.5f)] private float CohesionWeight = 1;
+    [SerializeField, Range(0.1f, 1.5f)] private float AlignWeight = 1;
 
 
     [Header("Indirect draw stuff")] [SerializeField] [Space]

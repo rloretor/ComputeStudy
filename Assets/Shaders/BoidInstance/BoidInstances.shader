@@ -109,7 +109,7 @@ Blend One Zero // Premultiplied transparency
                 o.wPos = v.vertex;
                 o.sphereWPos = boid.position;
                 o.rayD = (o.wPos -_WorldSpaceCameraPos.xyz);
-                o.color = float4(boid.scale,boid.dummy,instanceID,0);
+                o.color = float4(boid.scale,boid.dummy,instanceID,length(boid.velocity)/500);
                 o.vertex = mul(UNITY_MATRIX_VP,v.vertex);
                 o.uv =v.uv;
                 return o;
@@ -140,7 +140,7 @@ Blend One Zero // Premultiplied transparency
                 #endif
                 
                 float3 L = _WorldSpaceLightPos0;
-                o.color=  float4(N,1);//float4(dot(N,L) * BOIDPALETTE(i.color.y+0.5)  ,1);
+                o.color=  float4(dot(N,L) * BOIDPALETTE(i.color.z+i.color.w)  ,1);
                 return o;
             }
             ENDCG
