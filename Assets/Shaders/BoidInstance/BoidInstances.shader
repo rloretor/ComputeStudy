@@ -5,7 +5,7 @@
     }
     SubShader
     {
-        Tags { "RenderType"="Opaque" "Queue "= "Transparent" }
+        Tags { "RenderType"="Opaque"}
         LOD 100
         ZWrite On
 Blend One Zero // Premultiplied transparency
@@ -15,7 +15,7 @@ Blend One Zero // Premultiplied transparency
             #pragma vertex vert
             #pragma fragment frag
             #pragma target 4.5
-            
+            #pragma  multi_compile_fwdbase
             #pragma multi_compile_local __ ISBILLBOARD
 
 
@@ -54,6 +54,12 @@ Blend One Zero // Premultiplied transparency
                 float2 uv : TEXCOORD0;
                 
             };
+            
+            struct f2s
+            {
+                float4 color : SV_Target;
+                float depth : SV_Depth;
+            };
 
             float4x4 lookAtMatrix (float3 forward, float3 up){
                 float3 z = normalize(forward);
@@ -78,7 +84,8 @@ Blend One Zero // Premultiplied transparency
             {
                 return a + b*cos( 6.28318*(c*t+d) );
             }
-            #define BOIDPALETTE(p) pal( p, float3(0.8,0.5,0.4),float3(0.2,0.4,0.2),float3(2.0,1.0,1.0),float3(0.0,0.25,0.25) )
+            //https://www.shadertoy.com/view/ll2GD3
+            #define BOIDPALETTE(p) pal( p,float3(0.5,0.5,0.5),float3(0.5,0.5,0.5),float3(1.0,1.0,0.5),float3(0.8,0.90,0.30) )
             #define Rot(a)  float2x2(cos(a), sin(a),-sin(a), cos(a))
             v2f vert (appdata v, uint instanceID : SV_InstanceID)
             {
@@ -117,20 +124,24 @@ Blend One Zero // Premultiplied transparency
                 float st = step(0.0, min(t,d));
                 return lerp(-1.0, t, st);
             }
-            fixed4 frag (v2f i) : SV_Target
+            f2s frag (v2f i) : SV_Target
             {
+            f2s o;
                 float2 uv =  i.uv *2 -1;
                 float3 N = normalize(i.N);
                   #ifdef ISBILLBOARD
                     float3 D = normalize(i.rayD);
                     float d =  sphere(_WorldSpaceCameraPos.xyz,D,i.sphereWPos,_SphereRadius);
                     clip(d);
-                    float3 p = _WorldSpaceCameraPos.xyz+  D * d;
+                    float4 p = float4(_WorldSpaceCameraPos.xyz+  D * d,1);
                     N = normalize( p -i.sphereWPos);
+                    p = mul(UNITY_MATRIX_VP,float4(p.xyz,1));
+                    o.depth = p.z/p.w;
                 #endif
                 
                 float3 L = _WorldSpaceLightPos0;
-                return float4(dot(N,L) * BOIDPALETTE(i.color.z/_Instances) ,1);
+                o.color=  float4(N,1);//float4(dot(N,L) * BOIDPALETTE(i.color.y+0.5)  ,1);
+                return o;
             }
             ENDCG
         }

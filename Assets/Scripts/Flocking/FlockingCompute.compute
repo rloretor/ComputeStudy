@@ -66,6 +66,7 @@ float3 hash31(float p)
 #define E 0.0000001
 #define Rot(a)  float2x2(cos(a), sin(a),-sin(a), cos(a))
 #define pi acos(-1)
+#define InvLaw(x) 1/(1+ x*x +x)
 
 [numthreads(512,1,1)]
 void FlockingKernel (uint3 id : SV_DispatchThreadID)
@@ -103,16 +104,15 @@ void FlockingKernel (uint3 id : SV_DispatchThreadID)
    FAtt -= boid.position;
    FAtt = normalize(FAtt) * _MaxForce;
    FAtt  =IsNaN(FAtt)?FOrSeparation:FAtt;
-   FAtt  =IsNaN(FAtt)?0:FAtt;
    
    FAli /=max(ForceInteractions,E);
    FAli = normalize(FAli) * _MaxForce;
    FAli  =IsNaN(FAli)?boid.velocity:FAli;
 
-   _ForceWeights/=boid.scale;
+   _ForceWeights*=smoothstep (0,1,InvLaw(boid.scale));
    FOrSeparation = FRep*_ForceWeights.x +FAtt*_ForceWeights.y+FAli*_ForceWeights.z;
    weight= 1/(1+ForceInteractions*ForceInteractions +ForceInteractions);
-   boid.dummy=weight;  //wander weight
+    //wander weight
    FOrSeparation += normalize(boid.velocity+ (hash31(id.x+ _Time)*2.0-1.0))*(_Radius+boid.scale)* _MaxForce*weight;
    FOrSeparation/=(_ForceWeights.x+_ForceWeights.y+_ForceWeights.z+weight);
    
@@ -132,21 +132,25 @@ void KinematicKernel (uint3 id : SV_DispatchThreadID)
    }
 
    BoidData boid = _BoidsBuffer[id.x];
-   float3 FTotal   =  _BoidsNetForces[id.x] ;
-
-   float currentForce = max(length(FTotal), E); 
-   FTotal = (FTotal / currentForce) ;
-   FTotal = FTotal * min(_MaxForce*((1+1/boid.scale)+boid.scale*boid.dummy),currentForce);
+   float3 Vector   =  _BoidsNetForces[id.x] ; // ForceVector
+   float scaleWeight =2*exp(-boid.scale);
+  // scaleWeight =smoothstep(0,1,scaleWeight);
+    boid.dummy=scaleWeight;
+   float currentMagnitude = max(length(Vector), E); 
+   Vector = (Vector / currentMagnitude) ;
+   Vector = Vector * min(currentMagnitude, _MaxForce *(1+scaleWeight));
    
-   float3 Acceleration = FTotal / (_MassPerUnit*(1/boid.scale));
+   float3 Acceleration = Vector / (_MassPerUnit*boid.scale);
   
-   float3 Velocity = boid.velocity + Acceleration * _DeltaTime;
-   float3 currentSpeed = max(length(Velocity), E);
-   Velocity = Velocity / currentSpeed * min(currentSpeed, _MaxSpeed *((1+1/boid.scale)+boid.scale*boid.dummy));
-   float3 position = boid.position + Velocity  * _DeltaTime;
-   float3 reflectedPos = ReflectPointInBounds(position);
-   boid.velocity = normalize(reflectedPos - boid.position) * min(currentSpeed, _MaxSpeed);
+   Vector = boid.velocity + Acceleration * _DeltaTime; // VelocityVector
+   currentMagnitude = max(length(Vector), E);
+   Vector = Vector / currentMagnitude * min(currentMagnitude, _MaxSpeed *(1+scaleWeight));
+   float3 position = boid.position + Vector  * _DeltaTime;
+   
+   Vector = ReflectPointInBounds(position);
+   boid.velocity = normalize( Vector - boid.position) * min(currentMagnitude, _MaxSpeed*(1+scaleWeight));
    boid.position =  ClampPointToBounds(position);
+
    _BoidsBuffer[id.x] =boid  ;
 
 }

@@ -6,7 +6,7 @@ Preset:
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_Name: CoolPreset1
+  m_Name: CoolPreset2
   m_TargetType:
     m_NativeTypeID: 114
     m_ManagedTypePPtr: {fileID: 11500000, guid: be7a047b2f559204dbb944962aa64554,
@@ -47,15 +47,15 @@ Preset:
     objectReference: {fileID: 0}
   - target: {fileID: 0}
     propertyPath: boidBounds.m_Extent.x
-    value: 20
+    value: 50
     objectReference: {fileID: 0}
   - target: {fileID: 0}
     propertyPath: boidBounds.m_Extent.y
-    value: 20
+    value: 50
     objectReference: {fileID: 0}
   - target: {fileID: 0}
     propertyPath: boidBounds.m_Extent.z
-    value: 20
+    value: 50
     objectReference: {fileID: 0}
   - target: {fileID: 0}
     propertyPath: boidModel.MassPerUnit
@@ -63,15 +63,15 @@ Preset:
     objectReference: {fileID: 0}
   - target: {fileID: 0}
     propertyPath: boidModel.MaxForce
-    value: 100
+    value: 10000
     objectReference: {fileID: 0}
   - target: {fileID: 0}
     propertyPath: boidModel.MaxSpeed
-    value: 5
+    value: 20
     objectReference: {fileID: 0}
   - target: {fileID: 0}
     propertyPath: boidModel.Radius
-    value: 1
+    value: 2
     objectReference: {fileID: 0}
   - target: {fileID: 0}
     propertyPath: SeparationWeight
@@ -88,14 +88,15 @@ Preset:
   - target: {fileID: 0}
     propertyPath: BoidMesh
     value: 
-    objectReference: {fileID: 10210, guid: 0000000000000000e000000000000000, type: 0}
+    objectReference: {fileID: -5495902117074765545, guid: 909c5aa1bdc969f49958fc7e7d3f3446,
+      type: 3}
   - target: {fileID: 0}
     propertyPath: isbillboard
     value: 1
     objectReference: {fileID: 0}
   - target: {fileID: 0}
     propertyPath: ParticleSize
-    value: 0.31
+    value: 0.74
     objectReference: {fileID: 0}
   - target: {fileID: 0}
     propertyPath: BoidInstanceShader
