@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Rendering;
 using Random = UnityEngine.Random;
 
 
@@ -15,20 +16,20 @@ public struct BoidData
 [Serializable]
 public class BoidModel
 {
-    public float massPerUnit;
+    public float MassPerUnit;
     public float MaxForce;
     public float MaxSpeed;
-    public float Radius;
+    [Range(1, 10)] public float Radius;
 }
 
 public class FlockingCompute : MonoBehaviour
 {
     private const int GroupSize = 512;
 
-    [Header("Compute Buffer stuff")] [SerializeField]
+    [Header("Compute Buffer stuff")] [SerializeField] [Space]
     private int instances;
 
-    [SerializeField] private ComputeShader flockingShader;
+    [Space] [SerializeField] private ComputeShader flockingShader;
     [SerializeField] private Bounds boidBounds;
     [SerializeField] private BoidModel boidModel;
 
@@ -36,31 +37,61 @@ public class FlockingCompute : MonoBehaviour
     private List<Vector3> boidsForcesList = new List<Vector3>();
     private ComputeBuffer boidBuffer;
     private ComputeBuffer boidForcesBuffer;
-    private ComputeBuffer IncirectArgsThreadGroup;
+    private ComputeBuffer IndirectArgsThreadGroup;
     private int[] IndirectComputeArgs;
     private int FlockingKernel;
     private int KinematicKernel;
+    private int ThreadGroupSize;
 
-    [SerializeField, Range(1, 10)] private float SeparationWeight;
+    [Space, Header("Parametrizable behavior"), Range(1, 10), SerializeField,]
+    private float SeparationWeight;
+
     [SerializeField, Range(1, 10)] private float CohesionWeight;
     [SerializeField, Range(1, 10)] private float AlignWeight;
 
 
-    [Header("Indirect draw stuff")] [SerializeField]
+    [Header("Indirect draw stuff")] [SerializeField] [Space]
     private Mesh BoidMesh;
 
+    [SerializeField] private bool isbillboard = true;
+    [SerializeField, Range(0, 5.0f)] private float ParticleSize;
     [SerializeField] private Shader BoidInstanceShader;
 
     private Material BoidDrawMaterial;
+
     //private ComputeBuffer BufferWithArgs;
     //private uint[] args = new uint[5] {0, 0, 0, 0, 0};
+    private void OnDrawGizmos()
+    {
+        Gizmos.color = new Color(0.2f, 0.2f, 0.2f, 1f);
+        Gizmos.DrawWireCube(boidBounds.center, boidBounds.size);
+    }
 
     private void Start()
     {
+        ThreadGroupSize = Mathf.CeilToInt((float) instances / GroupSize);
         InitBuffersCompute();
         //  InitBuffersDraw();
         InitMaterial();
         SetBuffers();
+    }
+
+    private void InitBuffersCompute()
+    {
+        PopulateBoids();
+        var boidByteSize = System.Runtime.InteropServices.Marshal.SizeOf(typeof(BoidData));
+        //Debug.Log(boidByteSize);
+        boidBuffer = new ComputeBuffer(instances, boidByteSize);
+        boidBuffer.SetData(boidsList.ToArray());
+
+        boidForcesBuffer = new ComputeBuffer(instances, sizeof(float) * 3);
+        boidForcesBuffer.SetData(boidsForcesList.ToArray());
+        IndirectComputeArgs = new[] {ThreadGroupSize, 1, 1};
+        IndirectArgsThreadGroup = new ComputeBuffer(1, sizeof(int) * 3, ComputeBufferType.IndirectArguments);
+        IndirectArgsThreadGroup.SetData(IndirectComputeArgs);
+
+        FlockingKernel = flockingShader.FindKernel("FlockingKernel");
+        KinematicKernel = flockingShader.FindKernel("KinematicKernel");
     }
 
     private void InitMaterial()
@@ -85,6 +116,15 @@ public class FlockingCompute : MonoBehaviour
 
         InitConstantBuffer();
     }
+
+    public void LateUpdate()
+    {
+        Graphics.DrawMeshInstancedProcedural(BoidMesh, 0, BoidDrawMaterial, boidBounds, instances, null,
+            ShadowCastingMode.Off, false);
+        //Graphics.DrawMeshInstancedIndirect(BoidMesh, 0, BoidDrawMaterial, boidBounds, BufferWithArgs);
+    }
+
+
 /*
     private void InitBuffersDraw()
     {
@@ -97,62 +137,47 @@ public class FlockingCompute : MonoBehaviour
     }
     */
 
-    private void OnDrawGizmos()
-    {
-        Gizmos.color = new Color(0.2f, 0.2f, 0.2f, 0.2f);
-        Gizmos.DrawCube(boidBounds.center, boidBounds.size);
-    }
 
     void Update()
     {
         Dispatch();
 
-        // BoidData[] fetchBoids = new BoidData[instances];
-        // boidBuffer.GetData(fetchBoids);
-        // for (var index = 0; index < fetchBoids.Length; index++)
-        // {
-        //     var a = fetchBoids[index];
-        //     Debug.DrawLine(a.position, a.position + a.velocity.normalized, Color.black);
-        // }
+        //BoidData[] fetchBoids = new BoidData[instances];
+        //boidBuffer.GetData(fetchBoids);
+        //for (var index = 0; index < fetchBoids.Length; index++)
+        //{
+        //    var a = fetchBoids[index];
+        //    Debug.DrawLine(a.position, a.position + a.velocity.normalized * 0.01f, Color.black);
+        //}
     }
 
-    public void LateUpdate()
-    {
-        Graphics.DrawMeshInstancedProcedural(BoidMesh, 0, BoidDrawMaterial, boidBounds, instances);
-        //Graphics.DrawMeshInstancedIndirect(BoidMesh, 0, BoidDrawMaterial, boidBounds, BufferWithArgs);
-    }
 
     private void Dispatch()
     {
         flockingShader.SetFloat("_DeltaTime", Time.deltaTime);
         flockingShader.SetVector("_ForceWeights", new Vector3(SeparationWeight, CohesionWeight, AlignWeight));
 
+        if (isbillboard)
+        {
+            BoidDrawMaterial.EnableKeyword("ISBILLBOARD");
+            BoidDrawMaterial.SetFloat("_SphereRadius", ParticleSize/2.0f);
+        }
+        else
+        {
+            BoidDrawMaterial.DisableKeyword("ISBILLBOARD");
+        }
+        
+
         if (Time.frameCount % 2 == 0)
         {
-            flockingShader.DispatchIndirect(FlockingKernel, IncirectArgsThreadGroup);
+            flockingShader.DispatchIndirect(FlockingKernel, IndirectArgsThreadGroup);
+            //flockingShader.Dispatch(FlockingKernel, ThreadGroupSize, 1, 1);
         }
 
-        flockingShader.DispatchIndirect(KinematicKernel, IncirectArgsThreadGroup);
+        flockingShader.DispatchIndirect(KinematicKernel, IndirectArgsThreadGroup);
+        //flockingShader.Dispatch(KinematicKernel, ThreadGroupSize, 1, 1);
     }
 
-
-    private void InitBuffersCompute()
-    {
-        PopulateBoids();
-        var boidByteSize = System.Runtime.InteropServices.Marshal.SizeOf(typeof(BoidData));
-        boidBuffer = new ComputeBuffer(instances, boidByteSize);
-        boidBuffer.SetData(boidsList.ToArray());
-
-        boidForcesBuffer = new ComputeBuffer(instances, sizeof(float) * 3);
-        boidForcesBuffer.SetData(boidsForcesList.ToArray());
-        int TG = Mathf.CeilToInt((float) instances / GroupSize);
-        IndirectComputeArgs = new[] {TG, 1, 1};
-        IncirectArgsThreadGroup = new ComputeBuffer(1, sizeof(int) * 3, ComputeBufferType.IndirectArguments);
-        IncirectArgsThreadGroup.SetData(IndirectComputeArgs);
-
-        FlockingKernel = flockingShader.FindKernel("FlockingKernel");
-        KinematicKernel = flockingShader.FindKernel("KinematicKernel");
-    }
 
     private void InitConstantBuffer()
     {
@@ -169,19 +194,21 @@ public class FlockingCompute : MonoBehaviour
     {
         boidsList.Capacity = instances;
         boidsForcesList.Capacity = instances;
+        //  Vector3 prev = boidBounds.min;
         for (int i = 0; i < instances; i++)
         {
-            Vector4 pos = boidBounds.RandomPointInBounds();
-            pos.w = 1;
-            Vector4 vel = Random.insideUnitSphere.normalized;
-            vel.w = Random.Range(1, 10);
+            Vector3 pos = boidBounds.RandomPointInBounds();
+            //Debug.DrawLine(prev, pos, Color.black, 3600);
+            //prev = pos;
+            Vector3 vel = Random.insideUnitSphere.normalized;
             boidsList.Add(new BoidData()
             {
                 position = pos,
                 velocity = vel,
-                scale = (Mathf.Pow(Random.Range(0.8f, 1.0f), 2)) * 0.5f,
-                dummy = 1
+                scale = (Mathf.Pow(Random.Range(1, 2.0f), 2)),
+                dummy = Random.Range(0.0f, 1.0f)
             });
+
             boidsForcesList.Add(Vector3.zero);
         }
     }
@@ -192,7 +219,7 @@ public class FlockingCompute : MonoBehaviour
         boidForcesBuffer?.Release();
         // BufferWithArgs.Release();
         // args = null;
-        IncirectArgsThreadGroup?.Release();
+        IndirectArgsThreadGroup?.Release();
         IndirectComputeArgs = null;
         this.boidsList = null;
         this.boidsForcesList = null;

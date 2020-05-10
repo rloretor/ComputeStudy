@@ -67,7 +67,7 @@ public class FlockingCPUValidation : MonoBehaviour
 
                 float currentForce = Mathf.Max(FTotal.magnitude, 0.000001f);
                 FTotal = FTotal / currentForce * Mathf.Min(currentForce, boidModel.MaxForce);
-                Vector3 Acceleration = FTotal / boidModel.massPerUnit;
+                Vector3 Acceleration = FTotal / boidModel.MassPerUnit;
                 Vector3 Velocity = boid.velocity + Acceleration * Time.deltaTime;
                 float currentSpeed = Mathf.Max(Velocity.magnitude, 0.00001f);
                 Velocity = Velocity / currentSpeed * Mathf.Min(currentSpeed, boidModel.MaxSpeed);

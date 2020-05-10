@@ -46,10 +46,25 @@ float3 ReflectPointInBounds(float3 p)
     return float3(x, y, z);
 }
 //https://twitter.com/_Humus_/status/1074973351276371968?s=20
-bool IsNaN(float3 x)
+bool IsNaN(float3 v)
 {
-    return (asuint(x) & 0x7FFFFFFF) > 0x7F800000;
+     return (asuint(v.x) & 0x7FFFFFFF) > 0x7F800000 &&
+     (asuint(v.y) & 0x7FFFFFFF) > 0x7F800000 &&
+     (asuint(v.z) & 0x7FFFFFFF) > 0x7F800000;
 }
+float rand(float2 n) { 
+	return frac(sin(dot(n, float2(12.9898, 4.1414))) * 43758.5453);
+}
+
+float3 hash3( float3 p ){
+    float3 q = float3(  dot(p,float3(127.1,311.7,234.916)), 
+				        dot(p,float3(269.5,183.3,511.5234)), 
+				        dot(p,float3(419.2,371.9,8732.324998)) );
+	return frac(sin(q)*43758.5453);
+}
+#define E 0.0000001
+#define Rot(a)  float2x2(cos(a), sin(a),-sin(a), cos(a))
+#define pi acos(-1)
 
 [numthreads(512,1,1)]
 void FlockingKernel (uint3 id : SV_DispatchThreadID)
@@ -59,24 +74,25 @@ void FlockingKernel (uint3 id : SV_DispatchThreadID)
     return;
    }
   BoidData boid = _BoidsBuffer[id.x];
-  float sepLength,weight,currentForce,currentSpeed;
+  float sepLength,weight,currentSpeed;
   float ForceInteractions = _Instances;
-  float3 FRep=0,FAtt=0 ,FAli=0;
+  float3 FRep=0,FAtt=0,FAli=0;
 
-#define E 0.0000001
+
   [loop]for (uint bn = 0; bn < _Instances; bn++)
   {
     BoidData neighbour = _BoidsBuffer[bn];
     float3 sepDir = boid.position - neighbour.position;
     sepLength = max(length(sepDir),E);
-    weight = sepLength /_Radius;
+    weight = sepLength /(_Radius+ boid.scale);
     ForceInteractions -= weight > 1 || sepLength <= E;
     weight = 1.0f - min(weight, 1.0f);
+    weight = smoothstep(0,1.0,weight);
     FRep += (sepDir / sepLength) * weight * _MaxForce;
     FAtt += neighbour.position * ceil(weight);
     FAli += neighbour.velocity * weight;
   }
-  float3 FTotal = boid.velocity*E;
+  float3 FTotal = -boid.velocity;
     
    FRep /= max(ForceInteractions,E);
    FAtt /= (ForceInteractions + 1);
@@ -85,15 +101,19 @@ void FlockingKernel (uint3 id : SV_DispatchThreadID)
    FAtt  =IsNaN(FAtt)?FTotal:FAtt;
    FAli = normalize(FAli) * _MaxForce;
    
-  boid.dummy =exp( ForceInteractions/_Instances * 0.0001);
-  FTotal = FRep*_ForceWeights.x +FAtt*_ForceWeights.y+FAli*_ForceWeights.z;
-  FTotal/=(_ForceWeights.x+_ForceWeights.y+_ForceWeights.z);
-  currentForce = max(length(FTotal), 0.000001f);
-  FTotal = FTotal / currentForce * min(currentForce, _MaxForce);
-  _BoidsNetForces[id.x] =FTotal;
-  _BoidsBuffer[id.x] = boid;
+   FTotal = FRep*_ForceWeights.x +FAtt*_ForceWeights.y+FAli*_ForceWeights.z;
+   FTotal/=(_ForceWeights.x+_ForceWeights.y+_ForceWeights.z);
+   
+   float3 r = hash3(float3(id.x,boid.scale*_DeltaTime,boid.dummy));
+   r = r*2-1;
+   FTotal += r *FTotal*0.5;
+    
+   _BoidsNetForces[id.x] =FTotal;
+   _BoidsBuffer[id.x] = boid;
   
 }
+
+
 
 [numthreads(512,1,1)]
 void KinematicKernel (uint3 id : SV_DispatchThreadID)
@@ -103,17 +123,25 @@ void KinematicKernel (uint3 id : SV_DispatchThreadID)
     return;
    }
 
-  BoidData boid = _BoidsBuffer[id.x];
- float3 FTotal   =  _BoidsNetForces[id.x];
- float3 Acceleration = FTotal / (_MassPerUnit*boid.scale);
- float3 Velocity = boid.velocity + Acceleration * _DeltaTime;
- float3 currentSpeed = max(length(Velocity), 0.00001f);
- Velocity = Velocity / currentSpeed * min(currentSpeed, _MaxSpeed);
- float3 position = boid.position + Velocity * _DeltaTime;
- float3 reflectedPos = ReflectPointInBounds(position);
- boid.velocity = normalize(reflectedPos - boid.position) * min(currentSpeed, _MaxSpeed);
- boid.position =  ClampPointToBounds(position);
- _BoidsBuffer[id.x] =boid  ;
+   BoidData boid = _BoidsBuffer[id.x];
+   float3 FTotal   =  _BoidsNetForces[id.x] ;
+   float currentForce = max(length(FTotal), E); 
+   FTotal = (FTotal / currentForce) ;
+   FTotal = FTotal * min(_MaxForce,currentForce);
+   float3 Acceleration = FTotal / (_MassPerUnit*boid.scale);
+   float3 SpikeVel = hash3(float3(id.x,boid.scale*_DeltaTime,boid.dummy));
+  
+   float3 Velocity = boid.velocity + Acceleration   * _DeltaTime;
+   float3 currentSpeed = max(length(Velocity), E);
+   Velocity = Velocity / currentSpeed * min(currentSpeed, _MaxSpeed);  
+   float spike = exp(-currentSpeed /_MaxSpeed);
+  float3 r = hash3(float3(id.x,boid.scale*_DeltaTime,boid.dummy));
+   Velocity = Velocity *(1+ r*(spike+boid.scale/_MassPerUnit));
+   float3 position = boid.position + Velocity  * _DeltaTime;
+   float3 reflectedPos = ReflectPointInBounds(position);
+   boid.velocity = normalize(reflectedPos - boid.position) * min(currentSpeed, _MaxSpeed);
+   boid.position =  ClampPointToBounds(position);
+   _BoidsBuffer[id.x] =boid  ;
 
 }
 

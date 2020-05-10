@@ -7,8 +7,7 @@ public static class BoundsExtensions
         return new Vector3(
             Random.Range(bounds.min.x, bounds.max.x),
             Random.Range(bounds.min.y, bounds.max.y),
-            Random.Range(bounds.min.z, bounds.max.z)
-        );
+            Random.Range(bounds.min.z, bounds.max.z));
     }
 
     public static Vector3 ClampPointToBounds(this Bounds bounds, Vector3 p)
