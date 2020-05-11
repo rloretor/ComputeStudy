@@ -16,7 +16,7 @@ public struct BoidData
 [Serializable]
 public class BoidModel
 {
-    public float MassPerUnit;
+    public int MassPerUnit;
     public float MaxForce;
     public float MaxSpeed;
     [Range(1, 10)] public float Radius;
@@ -186,11 +186,12 @@ public class FlockingCompute : MonoBehaviour
     {
         flockingShader.SetInt("_Instances", instances);
         BoidDrawMaterial.SetInt("_Instances", instances);
+        flockingShader.SetInt("_MassPerUnit", boidModel.MassPerUnit);
 
         flockingShader.SetFloat("_Radius", boidModel.Radius);
         flockingShader.SetFloat("_MaxSpeed", boidModel.MaxSpeed);
         flockingShader.SetFloat("_MaxForce", boidModel.MaxForce);
-        flockingShader.SetInt("_MassPerUnit", (int) boidModel.MassPerUnit);
+
         flockingShader.SetVector("_MaxBound", boidBounds.max);
         flockingShader.SetVector("_MinBound", boidBounds.min);
     }

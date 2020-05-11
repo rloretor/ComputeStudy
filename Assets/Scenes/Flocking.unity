@@ -197,7 +197,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: be7a047b2f559204dbb944962aa64554, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  instances: 8192
+  instances: 32768
   flockingShader: {fileID: 7200000, guid: 48e4cd8890dc7aa4b9ff642120c4c9d4, type: 3}
   boidBounds:
     m_Center: {x: 0, y: 0, z: 0}
@@ -222,13 +222,13 @@ Transform:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 277470721}
-  m_LocalRotation: {x: -0.38637367, y: -0.10905881, z: -0.07246922, w: 0.9130004}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_Children: []
   m_Father: {fileID: 0}
   m_RootOrder: 2
-  m_LocalEulerAnglesHint: {x: -46.164, y: -11.927001, z: -3.979}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &540517275
 GameObject:
   m_ObjectHideFlags: 0
