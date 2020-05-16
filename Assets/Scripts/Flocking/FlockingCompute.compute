@@ -1,5 +1,6 @@
 ﻿#pragma kernel FlockingKernel
 #pragma kernel KinematicKernel
+//#define DEBUG
 struct BoidData{
     float3 position;
     float scale;
@@ -7,8 +8,19 @@ struct BoidData{
     float dummy;
 };
 
+#ifdef DEBUG
+struct BoidDebug{
+    float3 FAtt;
+    float3 FRep;
+    float3 FAli;
+    
+};
+RWStructuredBuffer<BoidDebug> _BoidsDebug;
+#endif
+
 RWStructuredBuffer<BoidData> _BoidsBuffer;
 RWStructuredBuffer<float3> _BoidsNetForces;
+
 
 uniform float _DeltaTime;
 uniform float _Time;
@@ -65,10 +77,12 @@ bool IsNaN(float3 v)
      (asuint(v.y) & 0x7FFFFFFF) > 0x7F800000 &&
      (asuint(v.z) & 0x7FFFFFFF) > 0x7F800000;
 }
+
+
 float rand(float2 n) { 
 	return frac(sin(dot(n, float2(12.9898, 4.1414))) * 43758.5453);
 }
-
+//https://www.shadertoy.com/view/4djSRW
 float3 hash31(float p)
 {
    float3 p3 = frac(p * float3(.1031, .1030, .0973));
@@ -94,54 +108,57 @@ void FlockingKernel (uint3 id : SV_DispatchThreadID)
     return;
    }
   BoidData boid = _BoidsBuffer[id.x];
-  float sepLength,weight,currentSpeed;
+  float sepLength,weight;
   int ForceInteractions = 0;
   float3 FRep=0,FAtt=boid.position,FAli=0, FOrSeparation=0;
-  int notSelf =0;
-  int n = 0;
-  _OuterRadius = _OuterRadius+boid.scale;
+  _OuterRadius = _OuterRadius+boid.scale/2;
+  _InnerRadius = max(_OuterRadius,_InnerRadius+boid.scale/2);
+  float oRadiusSqr = _OuterRadius * _OuterRadius;
+  float iRadiusSqr = _InnerRadius * _InnerRadius;
+  
     for (uint bn = 0; bn < _Instances; bn++)
     {        
       BoidData neighbour = _BoidsBuffer[bn];
       FOrSeparation = boid.position - neighbour.position; //eparation vector using declared flot3 for register pressure
       sepLength =dot(FOrSeparation,FOrSeparation);
-      if(sepLength<=E || sepLength>(_OuterRadius*_OuterRadius)  || sepLength<_InnerRadius){
+      if(sepLength<=E || sepLength>(oRadiusSqr) ){
         continue;
       }
-      sepLength = max(sqrt(sepLength),E);
-      weight = sepLength /(_OuterRadius);
       ForceInteractions +=1;
-      weight = 1.0f - min(weight, 1.0f);
-     // weight = smoothstep(0,1.0,weight);
-      FRep += (FOrSeparation / sepLength) * weight;
+      weight =smoothstep(0,1.0, 1.0f -min(sepLength /(oRadiusSqr), 1.0f));
       FAtt += neighbour.position;
       FAli += neighbour.velocity * weight; 
+      weight =smoothstep(0,1.0, 1.0f -min(sepLength /(iRadiusSqr), 1.0f));
+      FRep += FOrSeparation  * weight;
     }
+    _ForceWeights*= 1 +exp(-(4-boid.scale)/4);
+     if(ForceInteractions>0){
+         weight =1./ForceInteractions;
+         FRep *=weight; 
+         FAli *=weight;
+         FOrSeparation = FRep*_ForceWeights.x +FAli*_ForceWeights.z;
+         weight = _ForceWeights.x +_ForceWeights.z;
+    }
+    FAtt /=(ForceInteractions+1);
+    FAtt = -boid.position + FAtt ;
+
+    FOrSeparation += FAtt*_ForceWeights.y;
+    weight += _ForceWeights.y;
+    sepLength =1. / (1 + ForceInteractions*ForceInteractions + ForceInteractions ); // rathe separation force reusing register
+    //weight+= sepLength;
+    boid.dummy = sepLength;
     
-    _ForceWeights*= 1 +exp(-boid.scale/4);
-   weight= 1./(1.+ForceInteractions*ForceInteractions +ForceInteractions);
-   boid.dummy = -normalize(boid.velocity); 
-   FOrSeparation = normalize (boid.velocity *_DeltaTime
-                           + normalize( hash31(id.x+ aMod(floor(_Time*13.11*boid.dummy),1000.0))*2.0-1.0));
-    if(ForceInteractions>0){
-        weight =1./ForceInteractions;
-        FRep *=weight;
-        FRep = SafeNormalize(FRep);
-        FAli *=weight;
-        FAli = SafeNormalize(FAli);
-        FOrSeparation += FRep*_ForceWeights.x +FAli*_ForceWeights.z;
-        weight += _ForceWeights.x +_ForceWeights.z;
-   }
-   FAtt /=(ForceInteractions+1);
-   FAtt = -boid.position + FAtt;
-   FAtt = SafeNormalize(FAtt);
-   FOrSeparation += FAtt*_ForceWeights.y;
-   weight += _ForceWeights.y;
-
-   _BoidsNetForces[id.x] = SetMagnitude( _BoidsNetForces[id.x]+ (FOrSeparation /weight)/*/(boid.scale*_MassPerUnit)*/,_MaxForce); 
-
-
-   _BoidsBuffer[id.x] = boid;
+    #ifdef DEBUG
+     BoidDebug _boidDebug = _BoidsDebug[id.x];
+     _boidDebug.FAli = FAli*_ForceWeights.z;
+     _boidDebug.FRep = FRep*_ForceWeights.x;
+     _boidDebug.FAtt =  FAtt*_ForceWeights.y;
+    _BoidsDebug[id.x] = _boidDebug;
+    #endif
+    
+    FRep = normalize( SafeNormalize(_BoidsNetForces[id.x])  + (hash31(id.x+_Time/4)*2.0-1)*length(boid.velocity)/2)*_MaxSpeed* (sepLength+0.1)  ;
+    _BoidsNetForces[id.x] =  _BoidsNetForces[id.x] *0.2f+ 0.8f* (SafeNormalize(FOrSeparation /weight    )*(_MaxForce+boid.scale))/(boid.scale * _MassPerUnit); 
+    _BoidsBuffer[id.x] = boid;
   
 }
 
@@ -155,11 +172,11 @@ void KinematicKernel (uint3 id : SV_DispatchThreadID)
     return;
    }
     BoidData boid = _BoidsBuffer[id.x];
-_MaxForce -= boid.scale;
-_MaxSpeed-= boid.scale;
+    _MaxForce -= boid.scale;
+    _MaxSpeed-= boid.scale;
     float3 Vector   = _BoidsNetForces[id.x] ; // ForceVector
     
-    boid.velocity =  SetMagnitude(boid.velocity +Vector * _DeltaTime,_MaxSpeed); // v+a*t
+    boid.velocity =  SetMagnitude(boid.velocity +Vector * _DeltaTime,_MaxSpeed + boid.scale); // v+a*t
 
     //reflection calc    
     int boidInBounds = IsPointInBounds(boid.position,_MinBound,_MaxBound);
@@ -176,40 +193,9 @@ _MaxSpeed-= boid.scale;
     Vector  = _BoidsNetForces[id.x];
    float currentMagnitude = length(Vector);
     Vector = SetMagnitude( lerp(inverseDirection*_MaxForce,Vector,boidInBounds),currentMagnitude); 
-    _BoidsNetForces[id.x] = Vector;
+    _BoidsNetForces[id.x] = Vector*0.9;
     
     _BoidsBuffer[id.x] =boid;
 
-
-   
-
-  //BoidData boid = _BoidsBuffer[id.x];
-  //float3 Vector   =  _BoidsNetForces[id.x] ; // ForceVector
-//
-  // boid.dummy=1;//1+2*exp(-boid.scale);
-//
-  // float currentMagnitude = max(length(Vector), E); 
-  // Vector = (Vector / currentMagnitude) ;
-  // Vector = Vector * min(currentMagnitude, _MaxForce *  boid.dummy);
-  // 
-  // Vector = Vector / (_MassPerUnit*boid.scale); //Acceleration vector
-  //
-  // Vector = boid.velocity + Vector * _DeltaTime; // Velocity Vector
-  // currentMagnitude = max(length(Vector), E);
-  // Vector = Vector / currentMagnitude * min(currentMagnitude, _MaxSpeed *  boid.dummy);
-  // 
-  // float3 position = boid.position + Vector  * _DeltaTime;
-  // Vector = ReflectPointInBounds(position);
-  // 
-  // currentMagnitude =  min(currentMagnitude, _MaxSpeed*  boid.dummy);
-  // Vector = normalize( Vector - boid.position) ; //reflected direction
-  // //boid.dummy = smoothstep(-1,1, dot(Vector, normalize(boid.velocity))); 
-  // boid.velocity =Vector * currentMagnitude;
-  // boid.position =  ReflectPointInBounds(position);
-//
-  // _BoidsBuffer[id.x] =boid  ;
-
 }
-
-
 

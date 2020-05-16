@@ -13,6 +13,13 @@ public struct BoidData
     public float dummy;
 }
 
+public struct DebugData
+{
+    public Vector3 FAtt;
+    public Vector3 FRep;
+    public Vector3 FAli;
+}
+
 [Serializable]
 public class BoidModel
 {
@@ -25,6 +32,7 @@ public class BoidModel
 
 public class FlockingCompute : MonoBehaviour
 {
+    public bool DEBUG;
     private const int GroupSize = 512;
 
     [Header("Compute Buffer stuff")] [SerializeField] [Space]
@@ -35,10 +43,12 @@ public class FlockingCompute : MonoBehaviour
     [SerializeField] private BoidModel boidModel;
 
     private List<BoidData> boidsList = new List<BoidData>();
+    private List<DebugData> boidsDebugData = new List<DebugData>();
     private List<Vector3> boidsForcesList = new List<Vector3>();
     private ComputeBuffer boidBuffer;
     private ComputeBuffer boidForcesBuffer;
     private ComputeBuffer IndirectArgsThreadGroup;
+    private ComputeBuffer DebugDataBuffer;
     private int[] IndirectComputeArgs;
     private int FlockingKernel;
     private int KinematicKernel;
@@ -71,6 +81,7 @@ public class FlockingCompute : MonoBehaviour
     private void Start()
     {
         ThreadGroupSize = Mathf.CeilToInt((float) instances / GroupSize);
+        PopulateBoids();
         InitBuffersCompute();
         //  InitBuffersDraw();
         InitMaterial();
@@ -79,14 +90,20 @@ public class FlockingCompute : MonoBehaviour
 
     private void InitBuffersCompute()
     {
-        PopulateBoids();
         var boidByteSize = System.Runtime.InteropServices.Marshal.SizeOf(typeof(BoidData));
-        //Debug.Log(boidByteSize);
         boidBuffer = new ComputeBuffer(instances, boidByteSize);
-        boidBuffer.SetData(boidsList.ToArray());
+        boidBuffer.SetData(boidsList);
 
         boidForcesBuffer = new ComputeBuffer(instances, sizeof(float) * 3);
-        boidForcesBuffer.SetData(boidsForcesList.ToArray());
+        boidForcesBuffer.SetData(boidsForcesList);
+
+        if (DEBUG)
+        {
+            DebugDataBuffer =
+                new ComputeBuffer(instances, System.Runtime.InteropServices.Marshal.SizeOf(typeof(DebugData)));
+            DebugDataBuffer.SetData(boidsDebugData);
+        }
+
         IndirectComputeArgs = new[] {ThreadGroupSize, 1, 1};
         IndirectArgsThreadGroup = new ComputeBuffer(1, sizeof(int) * 3, ComputeBufferType.IndirectArguments);
         IndirectArgsThreadGroup.SetData(IndirectComputeArgs);
@@ -109,6 +126,11 @@ public class FlockingCompute : MonoBehaviour
     {
         flockingShader.SetBuffer(FlockingKernel, "_BoidsBuffer", boidBuffer);
         flockingShader.SetBuffer(FlockingKernel, "_BoidsNetForces", boidForcesBuffer);
+        if (DEBUG)
+        {
+            flockingShader.SetBuffer(FlockingKernel, "_BoidsDebug", DebugDataBuffer);
+            flockingShader.SetBuffer(KinematicKernel, "_BoidsDebug", DebugDataBuffer);
+        }
 
         flockingShader.SetBuffer(KinematicKernel, "_BoidsBuffer", boidBuffer);
         flockingShader.SetBuffer(KinematicKernel, "_BoidsNetForces", boidForcesBuffer);
@@ -144,18 +166,27 @@ public class FlockingCompute : MonoBehaviour
         Dispatch();
 #if UNITY_EDITOR
         InitConstantBuffer();
-#endif
 
-        //BoidData[] fetchBoids = new BoidData[instances];
-        //Vector3[] fetchForces = new Vector3[instances];
-        //boidBuffer.GetData(fetchBoids);
-        //boidForcesBuffer.GetData(fetchForces);
-        //for (var index = 0; index < instances; index++)
-        //{
-        //    var a = fetchBoids[index];
-        //    Debug.DrawLine(a.position, a.position + a.velocity, Color.black);
-        //    Debug.DrawLine(a.position, a.position + fetchForces[index], Color.blue);
-        //}
+        if (DEBUG)
+        {
+            BoidData[] fetchBoids = new BoidData[instances];
+            Vector3[] fetchForces = new Vector3[instances];
+            DebugData[] fetchDebugForces = new DebugData[instances];
+            boidBuffer.GetData(fetchBoids);
+            boidForcesBuffer.GetData(fetchForces);
+            DebugDataBuffer.GetData(fetchDebugForces);
+            for (var index = 0; index < instances; index++)
+            {
+                var a = fetchBoids[index];
+                var f = fetchDebugForces[index];
+                Debug.DrawLine(a.position, a.position + a.velocity, Color.black);
+                Debug.DrawLine(a.position, a.position + fetchForces[index], Color.white);
+                Debug.DrawLine(a.position, a.position + f.FRep, Color.red);
+                Debug.DrawLine(a.position, a.position + f.FAtt, Color.green);
+                Debug.DrawLine(a.position, a.position + f.FAli, Color.blue);
+            }
+        }
+#endif
     }
 
 
@@ -169,14 +200,14 @@ public class FlockingCompute : MonoBehaviour
         {
             BoidDrawMaterial.EnableKeyword("ISBILLBOARD");
         }
+
         else
         {
             BoidDrawMaterial.DisableKeyword("ISBILLBOARD");
         }
 
-
         flockingShader.DispatchIndirect(KinematicKernel, IndirectArgsThreadGroup);
-        // flockingShader.Dispatch(KinematicKernel, ThreadGroupSize, 1, 1);
+// flockingShader.Dispatch(KinematicKernel, ThreadGroupSize, 1, 1);
         if (Time.frameCount % 2 == 0)
         {
             //flockingShader.DispatchIndirect(FlockingKernel, IndirectArgsThreadGroup);
@@ -190,12 +221,10 @@ public class FlockingCompute : MonoBehaviour
         flockingShader.SetInt("_Instances", instances);
         BoidDrawMaterial.SetInt("_Instances", instances);
         flockingShader.SetInt("_MassPerUnit", boidModel.MassPerUnit);
-
         flockingShader.SetFloat("_OuterRadius", boidModel.OuterRadius);
         flockingShader.SetFloat("_InnerRadius", boidModel.InnerRadius);
         flockingShader.SetFloat("_MaxSpeed", boidModel.MaxSpeed);
         flockingShader.SetFloat("_MaxForce", boidModel.MaxForce);
-
         flockingShader.SetVector("_MaxBound", boidBounds.max);
         flockingShader.SetVector("_MinBound", boidBounds.min);
     }
@@ -204,8 +233,11 @@ public class FlockingCompute : MonoBehaviour
     {
         boidsList.Capacity = instances;
         boidsForcesList.Capacity = instances;
-        //  Vector3 prev = boidBounds.min;
-        for (int i = 0; i < instances; i++)
+        boidsDebugData.Capacity = instances;
+//  Vector3 prev = boidBounds.min;
+        for (int i = 0;
+            i < instances;
+            i++)
         {
             Vector3 pos = boidBounds.RandomPointInBounds();
             //Debug.DrawLine(prev, pos, Color.black, 3600);
@@ -218,6 +250,15 @@ public class FlockingCompute : MonoBehaviour
                 scale = (Mathf.Pow(Random.Range(1, 2.0f), 2)),
                 dummy = Random.Range(0.0f, 1.0f)
             });
+            if (DEBUG)
+            {
+                boidsDebugData.Add(new DebugData()
+                {
+                    FAli = Vector3.zero,
+                    FRep = Vector3.zero,
+                    FAtt = Vector3.zero
+                });
+            }
 
             boidsForcesList.Add(Vector3.zero);
         }
@@ -227,12 +268,15 @@ public class FlockingCompute : MonoBehaviour
     {
         boidBuffer?.Release();
         boidForcesBuffer?.Release();
-        // BufferWithArgs.Release();
-        // args = null;
+        DebugDataBuffer?.Release();
+
+// BufferWithArgs.Release();
+// args = null;
         IndirectArgsThreadGroup?.Release();
         IndirectComputeArgs = null;
         this.boidsList = null;
         this.boidsForcesList = null;
+        this.boidsDebugData = null;
         Destroy(BoidDrawMaterial);
     }
 

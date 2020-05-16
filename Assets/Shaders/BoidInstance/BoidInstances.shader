@@ -24,6 +24,9 @@ Blend One Zero // Premultiplied transparency
             #include "UnityLightingCommon.cginc"
             #include "AutoLight.cginc"
             
+            #define E 0.0000001
+
+            
             struct BoidData{
                 float3 position;
                 float scale;
@@ -84,6 +87,13 @@ Blend One Zero // Premultiplied transparency
             {
                 return a + b*cos( 6.28318*(c*t+d) );
             }
+            struct Ellipsoid
+            {
+                float3 cen;
+                float3 rad;
+            };
+            
+
             //https://www.shadertoy.com/view/ll2GD3
             #define BOIDPALETTE(p) pal( p,float3(0.5,0.5,0.5),float3(0.5,0.5,0.5),float3(1.0,1.0,0.5),float3(0.8,0.90,0.30) )
             #define Rot(a)  float2x2(cos(a), sin(a),-sin(a), cos(a))
@@ -93,14 +103,14 @@ Blend One Zero // Premultiplied transparency
                 BoidData boid = _BoidsBuffer[instanceID];
                
                 #ifdef ISBILLBOARD
-                float3 localSpaceCameraPos = mul(unity_WorldToObject, float4(_WorldSpaceCameraPos.xyz, 1));            
-                float3 camVect = normalize(boid.position - localSpaceCameraPos);
-                float4x4 rot =lookAtMatrix( v.vertex  - localSpaceCameraPos,float3(0,1,0));
-                v.vertex.xyz*=(_SphereRadius+boid.scale);
-                #else         
-                float4x4 rot =lookAtMatrix( boid.velocity,float3(0,1,0));
-              //  v.vertex.xy = mul(Rot(lerp(-45,45,boid.dummy)*0.01745329252),v.vertex.xy);
-                o.N =  mul(rot,v.normal);
+                 float3 localSpaceCameraPos = mul(unity_WorldToObject, float4(_WorldSpaceCameraPos.xyz, 1));            
+                 float3 camVect = normalize(boid.position - localSpaceCameraPos);
+                 float4x4 rot =lookAtMatrix( v.vertex  - localSpaceCameraPos,float3(0,1,0));
+                 v.vertex.xyz*=(_SphereRadius*boid.scale+10);
+                 #else         
+                 float4x4 rot =lookAtMatrix( boid.velocity,float3(0,1,0));
+                 //  v.vertex.xy = mul(Rot(lerp(-45,45,boid.dummy)*0.01745329252),v.vertex.xy);
+                 o.N =  mul(rot,v.normal);
                  v.vertex.xyz*=(_SphereRadius*boid.scale);
                 #endif
                 v.vertex  = mul(rot,v.vertex);
@@ -109,7 +119,7 @@ Blend One Zero // Premultiplied transparency
                 o.wPos = v.vertex;
                 o.sphereWPos = boid.position;
                 o.rayD = (o.wPos -_WorldSpaceCameraPos.xyz);
-                o.color = float4(boid.scale,boid.dummy,instanceID,length(boid.velocity)/500);
+                o.color = float4(boid.velocity,boid.dummy);
                 o.vertex = mul(UNITY_MATRIX_VP,v.vertex);
                 o.uv =v.uv;
                 return o;
@@ -124,6 +134,26 @@ Blend One Zero // Premultiplied transparency
                 float st = step(0.0, min(t,d));
                 return lerp(-1.0, t, st);
             }
+            
+           float ellipsoid( float3 ro, float3 rd,  Ellipsoid sph )
+            {
+                float3 oc = ro - sph.cen;
+                
+                float3 ocn = oc / sph.rad;
+                float3 rdn = rd / sph.rad;
+                
+                float a = dot( rdn, rdn );
+            	float b = dot( ocn, rdn );
+            	float c = dot( ocn, ocn );
+            	float h = b*b - a*(c-1.0);
+            	if( h<0.0 ) return -1.0;
+            	return (-b - sqrt( h ))/a;
+            }
+            
+            float3 SafeNormalize(float3 v){
+                float d = dot(v,v);
+                return d<=E?0: v/sqrt(d);
+            }
             f2s frag (v2f i) : SV_Target
             {
             f2s o;
@@ -131,7 +161,13 @@ Blend One Zero // Premultiplied transparency
                 float3 N = normalize(i.N);
                   #ifdef ISBILLBOARD
                     float3 D = normalize(i.rayD);
-                    float d =  sphere(_WorldSpaceCameraPos.xyz,D,i.sphereWPos,_SphereRadius);
+                    Ellipsoid e;
+                    e.cen =i.sphereWPos;
+                    e.rad = _SphereRadius+ abs(SafeNormalize(i.color.xyz))*_SphereRadius;
+                   // float d =  sphere(_WorldSpaceCameraPos.xyz,D,i.sphereWPos,(_SphereRadius*i.color.x)/2);
+                    float d =  ellipsoid( _WorldSpaceCameraPos.xyz
+                                        , D
+                                        ,e);
                     clip(d);
                     float4 p = float4(_WorldSpaceCameraPos.xyz+  D * d,1);
                     N = normalize( p -i.sphereWPos);
@@ -140,7 +176,7 @@ Blend One Zero // Premultiplied transparency
                 #endif
                 
                 float3 L = _WorldSpaceLightPos0;
-                o.color=  float4(dot(N,L) * BOIDPALETTE(i.color.z+i.color.w)  ,1);
+                o.color=   float4(N,1);//dot(N,L) ;
                 return o;
             }
             ENDCG
