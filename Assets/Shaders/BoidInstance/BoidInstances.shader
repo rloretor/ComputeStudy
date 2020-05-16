@@ -99,7 +99,7 @@ Blend One Zero // Premultiplied transparency
                 v.vertex.xyz*=(_SphereRadius+boid.scale);
                 #else         
                 float4x4 rot =lookAtMatrix( boid.velocity,float3(0,1,0));
-                v.vertex.xy = mul(Rot(lerp(-45,45,boid.dummy)*0.01745329252),v.vertex.xy);
+              //  v.vertex.xy = mul(Rot(lerp(-45,45,boid.dummy)*0.01745329252),v.vertex.xy);
                 o.N =  mul(rot,v.normal);
                  v.vertex.xyz*=(_SphereRadius*boid.scale);
                 #endif

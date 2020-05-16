@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using UnityEngine;
 using Random = UnityEngine.Random;
 
@@ -25,58 +26,65 @@ public class FlockingCPUValidation : MonoBehaviour
 
             for (var b = 0; b < boidsList.Count; b++)
             {
-                Vector3 FRep = Vector3.zero;
-                Vector3 FAtt = Vector3.zero;
-                Vector3 FAli = Vector3.zero;
                 var boid = boidsList[b];
-                float ForceInteractions = instances;
+                Vector3 FRep = Vector3.zero;
+                Vector3 FAtt = boid.position;
+                Vector3 FAli = Vector3.zero;
+                float ForceInteractions = 0;
+                int notSelf = 0;
                 for (var bn = 0; bn < boidsList.Count; bn++)
                 {
                     var neighbour = boidsList[bn];
                     Vector3 sepDir = boid.position - neighbour.position;
-                    float sepLength = Mathf.Max(sepDir.magnitude, 0.00000001f);
-                    float weight = sepLength / boidModel.Radius;
-                    ForceInteractions -= ((weight > 1 || sepLength < 0.00001f) ? 1 : 0);
-                    weight = 1 - Mathf.Min(weight, 1);
-                    FRep += (sepDir / sepLength) * weight * boidModel.MaxForce;
-                    if (weight != 0)
+                    float sepLength = Mathf.Max(sepDir.magnitude, Mathf.Epsilon);
+                    float weight = sepLength / boidModel.OuterRadius;
+                    notSelf = (weight > Mathf.Epsilon ? 1 : 0);
+                    if (weight > Mathf.Epsilon)
                     {
-                        Gizmos.color = Color.cyan;
-                        Gizmos.DrawLine(boid.position, neighbour.position);
+                        Gizmos.color = Color.white * (1 - Mathf.Min(weight, 1));
+                        Debug.Log(1 - Mathf.Min(weight, 1));
+                        Gizmos.DrawWireSphere(boid.position, boidModel.OuterRadius);
+                        Gizmos.DrawWireSphere(neighbour.position, boidModel.OuterRadius);
                     }
 
-                    FAtt += neighbour.position * Mathf.Ceil(weight);
-                    FAli += neighbour.velocity * weight;
+                    weight = 1 - Mathf.Min(weight, 1);
+                    ForceInteractions += notSelf;
+                    FRep += (sepDir / sepLength) * weight * notSelf;
+                    FAtt += neighbour.position * Mathf.Ceil(weight) * notSelf;
+                    FAli += neighbour.velocity * weight * notSelf;
                 }
 
                 Vector3 FTotal = boid.velocity;
-                if (ForceInteractions > 0)
-                {
-                    FRep /= ForceInteractions;
-                    FAtt /= (ForceInteractions + 1);
-                    Gizmos.color = Color.yellow;
-                    Gizmos.DrawLine(boid.position, FAtt);
-                    FAtt = FAtt - boid.position;
-                    FAtt = FAtt.normalized * boidModel.MaxForce * 0.9f;
-                    Gizmos.color = new Color(0, 0, 1, 0.2f);
-                    Gizmos.DrawLine(boid.position, boid.position + FAtt);
-                    FAli = FAli.normalized * boidModel.MaxForce;
-                    FTotal = FAtt; //+ FAli + FRep;
-                }
+                float avg = 1 / Mathf.Max(ForceInteractions, Mathf.Epsilon);
+                FRep *= avg;
+                //isnan
+                Gizmos.color = Color.yellow;
+                Gizmos.DrawLine(boid.position, boid.position + FRep);
+                FAtt /= Mathf.Max(ForceInteractions + 1, Mathf.Epsilon);
+                Gizmos.color = new Color(0, 0, 1, 1f);
+                Gizmos.DrawLine(boid.position, FAtt);
+                FAtt = FAtt - boid.position;
+                Debug.Log(FAtt);
+                FAli *= avg;
+                FAli = FAli.normalized * boidModel.MaxForce;
+                FTotal = Vector3.right; //+ FAli + FRep;
 
 
-                float currentForce = Mathf.Max(FTotal.magnitude, 0.000001f);
-                FTotal = FTotal / currentForce * Mathf.Min(currentForce, boidModel.MaxForce);
+                float currentForce = Mathf.Max(FTotal.magnitude, Mathf.Epsilon);
+                FTotal = FTotal / currentForce * boidModel.MaxForce;
                 Vector3 Acceleration = FTotal / boidModel.MassPerUnit;
+                Gizmos.color = Color.red;
+                Gizmos.DrawLine(boid.position, boid.position + Acceleration);
                 Vector3 Velocity = boid.velocity + Acceleration * Time.deltaTime;
-                float currentSpeed = Mathf.Max(Velocity.magnitude, 0.00001f);
+                float currentSpeed = Mathf.Max(Velocity.magnitude, Mathf.Epsilon);
                 Velocity = Velocity / currentSpeed * Mathf.Min(currentSpeed, boidModel.MaxSpeed);
                 Vector3 position = boid.position + Velocity * Time.deltaTime;
 
                 Vector3 r = boidBounds.ReflectPointInBounds(position);
                 boid.velocity = (r - boid.position).normalized * Mathf.Min(currentSpeed, boidModel.MaxSpeed);
-                boid.position = boidBounds.ClampPointToBounds(position);
-
+                boid.position = boidBounds.ReflectPointInBounds(position);
+                Gizmos.color = Color.magenta;
+                Gizmos.DrawLine(boid.position, boid.position + Velocity);
                 if (Input.GetKey(KeyCode.A))
                 {
                     boidsList[b] = boid;
@@ -87,7 +95,7 @@ public class FlockingCPUValidation : MonoBehaviour
                 Gizmos.DrawMesh(boidMesh, boidsList[b].position,
                     Quaternion.LookRotation(boidsList[b].velocity.normalized), Vector3.one * .1f);
                 Gizmos.color = new Color(0, 1, 0, 0.1f);
-                Gizmos.DrawWireSphere(boid.position, boidModel.Radius);
+                Gizmos.DrawWireSphere(boid.position, boidModel.OuterRadius);
             }
 
             Gizmos.DrawCube(boidBounds.center, boidBounds.size);

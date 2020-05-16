@@ -19,7 +19,8 @@ public class BoidModel
     public int MassPerUnit;
     public float MaxForce;
     public float MaxSpeed;
-    [Range(1, 10)] public float Radius;
+    [Range(1, 10)] public float OuterRadius;
+    [Range(0, 10)] public float InnerRadius;
 }
 
 public class FlockingCompute : MonoBehaviour
@@ -43,11 +44,11 @@ public class FlockingCompute : MonoBehaviour
     private int KinematicKernel;
     private int ThreadGroupSize;
 
-    [Space, Header("Parametrizable behavior"), Range(0.1f, 1.5f), SerializeField,]
+    [Space, Header("Parametrizable behavior"), Range(0.1f, 3.5f), SerializeField,]
     private float SeparationWeight = 1;
 
-    [SerializeField, Range(0.1f, 1.5f)] private float CohesionWeight = 1;
-    [SerializeField, Range(0.1f, 1.5f)] private float AlignWeight = 1;
+    [SerializeField, Range(0.1f, 3.5f)] private float CohesionWeight = 1;
+    [SerializeField, Range(0.1f, 3.5f)] private float AlignWeight = 1;
 
 
     [Header("Indirect draw stuff")] [SerializeField] [Space]
@@ -146,11 +147,14 @@ public class FlockingCompute : MonoBehaviour
 #endif
 
         //BoidData[] fetchBoids = new BoidData[instances];
+        //Vector3[] fetchForces = new Vector3[instances];
         //boidBuffer.GetData(fetchBoids);
-        //for (var index = 0; index < fetchBoids.Length; index++)
+        //boidForcesBuffer.GetData(fetchForces);
+        //for (var index = 0; index < instances; index++)
         //{
         //    var a = fetchBoids[index];
-        //    Debug.DrawLine(a.position, a.position + a.velocity.normalized * 0.01f, Color.black);
+        //    Debug.DrawLine(a.position, a.position + a.velocity, Color.black);
+        //    Debug.DrawLine(a.position, a.position + fetchForces[index], Color.blue);
         //}
     }
 
@@ -171,14 +175,13 @@ public class FlockingCompute : MonoBehaviour
         }
 
 
+        flockingShader.DispatchIndirect(KinematicKernel, IndirectArgsThreadGroup);
+        // flockingShader.Dispatch(KinematicKernel, ThreadGroupSize, 1, 1);
         if (Time.frameCount % 2 == 0)
         {
-            flockingShader.DispatchIndirect(FlockingKernel, IndirectArgsThreadGroup);
-            //flockingShader.Dispatch(FlockingKernel, ThreadGroupSize, 1, 1);
+            //flockingShader.DispatchIndirect(FlockingKernel, IndirectArgsThreadGroup);
+            flockingShader.Dispatch(FlockingKernel, ThreadGroupSize, 1, 1);
         }
-
-        flockingShader.DispatchIndirect(KinematicKernel, IndirectArgsThreadGroup);
-        //flockingShader.Dispatch(KinematicKernel, ThreadGroupSize, 1, 1);
     }
 
 
@@ -188,7 +191,8 @@ public class FlockingCompute : MonoBehaviour
         BoidDrawMaterial.SetInt("_Instances", instances);
         flockingShader.SetInt("_MassPerUnit", boidModel.MassPerUnit);
 
-        flockingShader.SetFloat("_Radius", boidModel.Radius);
+        flockingShader.SetFloat("_OuterRadius", boidModel.OuterRadius);
+        flockingShader.SetFloat("_InnerRadius", boidModel.InnerRadius);
         flockingShader.SetFloat("_MaxSpeed", boidModel.MaxSpeed);
         flockingShader.SetFloat("_MaxForce", boidModel.MaxForce);
 
