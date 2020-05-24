@@ -1,12 +1,10 @@
-﻿using System.Collections;
-using System.Collections.Generic;
-using UnityEngine;
+﻿using UnityEngine;
 
 public class BilateralBlur : MonoBehaviour
 {
     [SerializeField] private Material postprocessMaterial;
 
-    void Start()
+    private void Start()
     {
         var _camera = Camera.current;
 
@@ -15,7 +13,7 @@ public class BilateralBlur : MonoBehaviour
     }
 
     //method which is automatically called by unity after the camera is done rendering
-    void OnRenderImage(RenderTexture source, RenderTexture destination)
+    private void OnRenderImage(RenderTexture source, RenderTexture destination)
     {
         //draws the pixels from the source texture to the destination texture
         var temporaryTexture = RenderTexture.GetTemporary(source.width, source.height, source.depth);

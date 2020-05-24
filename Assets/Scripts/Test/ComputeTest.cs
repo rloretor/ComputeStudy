@@ -1,23 +1,24 @@
 ﻿using System;
 using System.Collections;
+using System.IO;
 using UnityEditor;
 using UnityEngine;
 
 public class ComputeTest : MonoBehaviour
 {
     [SerializeField] private ComputeShader ComputeTestShader;
-    private Vector2Int RenderTextureSize = new Vector2Int(1920, 1080);
     private Vector2Int GroupSize = new Vector2Int(32, 32);
 
     [SerializeField] private RenderTexture myRenderTexture;
+    private Vector2Int RenderTextureSize = new Vector2Int(1920, 1080);
 
     public IEnumerator RunCompute()
     {
-        myRenderTexture = new RenderTexture(this.RenderTextureSize.x, this.RenderTextureSize.y - 1, 0);
+        myRenderTexture = new RenderTexture(RenderTextureSize.x, RenderTextureSize.y - 1, 0);
         myRenderTexture.enableRandomWrite = true;
         myRenderTexture.Create();
 
-        int kernelHandle = ComputeTestShader.FindKernel("CSMain");
+        var kernelHandle = ComputeTestShader.FindKernel("CSMain");
         ComputeTestShader.SetTexture(kernelHandle, "Result", myRenderTexture);
         Shader.SetGlobalTexture("Result", myRenderTexture);
         ComputeTestShader.SetVector("RTSize", new Vector4(RenderTextureSize.x, RenderTextureSize.y, 0, 0));
@@ -31,17 +32,17 @@ public class ComputeTest : MonoBehaviour
 
     public void SaveTexture()
     {
-        byte[] bytes = ToTexture2D(myRenderTexture).EncodeToPNG();
-        long ticks = DateTime.UtcNow.Ticks;
+        var bytes = ToTexture2D(myRenderTexture).EncodeToPNG();
+        var ticks = DateTime.UtcNow.Ticks;
         Debug.Log("saving to : " + $"{Application.dataPath}/Result_{ticks}.png");
-        System.IO.File.WriteAllBytes(
+        File.WriteAllBytes(
             $"{Application.dataPath}/Result_{ticks}.png",
             bytes);
     }
 
-    Texture2D ToTexture2D(RenderTexture rTex)
+    private Texture2D ToTexture2D(RenderTexture rTex)
     {
-        Texture2D tex = new Texture2D(RenderTextureSize.x, RenderTextureSize.y, TextureFormat.RGB24, false);
+        var tex = new Texture2D(RenderTextureSize.x, RenderTextureSize.y, TextureFormat.RGB24, false);
         RenderTexture.active = rTex;
         tex.ReadPixels(new Rect(0, 0, rTex.width, rTex.height), 0, 0);
         tex.Apply();
@@ -54,16 +55,13 @@ public class ComputeTest : MonoBehaviour
     }
 }
 
-[CustomEditor((typeof(ComputeTest)))]
+[CustomEditor(typeof(ComputeTest))]
 public class ComputeTestCustomEditor : Editor
 {
     public override void OnInspectorGUI()
     {
         base.OnInspectorGUI();
-        ComputeTest myTarget = target as ComputeTest;
-        if (GUILayout.Button("Dispatch ComputeShader and save"))
-        {
-            myTarget.StartComputeAndSave();
-        }
+        var myTarget = target as ComputeTest;
+        if (GUILayout.Button("Dispatch ComputeShader and save")) myTarget.StartComputeAndSave();
     }
 }

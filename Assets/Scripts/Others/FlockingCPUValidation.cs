@@ -1,18 +1,16 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using UnityEngine;
-using Random = UnityEngine.Random;
 
 public class FlockingCPUValidation : MonoBehaviour
 {
-    [SerializeField] private int instances;
     [SerializeField] private Bounds boidBounds;
-    [SerializeField] private BoidModel boidModel;
     [SerializeField] private Mesh boidMesh;
-    private List<BoidData> boidsList = new List<BoidData>();
+    [SerializeField] private BoidModel boidModel;
+    private readonly List<BoidData> boidsList = new List<BoidData>();
+    [SerializeField] private int instances;
 
     // Start is called before the first frame update
-    void Start()
+    private void Start()
     {
         PopulateBoids();
     }
@@ -27,18 +25,18 @@ public class FlockingCPUValidation : MonoBehaviour
             for (var b = 0; b < boidsList.Count; b++)
             {
                 var boid = boidsList[b];
-                Vector3 FRep = Vector3.zero;
-                Vector3 FAtt = boid.position;
-                Vector3 FAli = Vector3.zero;
+                var FRep = Vector3.zero;
+                var FAtt = boid.position;
+                var FAli = Vector3.zero;
                 float ForceInteractions = 0;
-                int notSelf = 0;
+                var notSelf = 0;
                 for (var bn = 0; bn < boidsList.Count; bn++)
                 {
                     var neighbour = boidsList[bn];
-                    Vector3 sepDir = boid.position - neighbour.position;
-                    float sepLength = Mathf.Max(sepDir.magnitude, Mathf.Epsilon);
-                    float weight = sepLength / boidModel.OuterRadius;
-                    notSelf = (weight > Mathf.Epsilon ? 1 : 0);
+                    var sepDir = boid.position - neighbour.position;
+                    var sepLength = Mathf.Max(sepDir.magnitude, Mathf.Epsilon);
+                    var weight = sepLength / boidModel.OuterRadius;
+                    notSelf = weight > Mathf.Epsilon ? 1 : 0;
                     if (weight > Mathf.Epsilon)
                     {
                         Gizmos.color = Color.white * (1 - Mathf.Min(weight, 1));
@@ -49,13 +47,13 @@ public class FlockingCPUValidation : MonoBehaviour
 
                     weight = 1 - Mathf.Min(weight, 1);
                     ForceInteractions += notSelf;
-                    FRep += (sepDir / sepLength) * weight * notSelf;
+                    FRep += sepDir / sepLength * weight * notSelf;
                     FAtt += neighbour.position * Mathf.Ceil(weight) * notSelf;
                     FAli += neighbour.velocity * weight * notSelf;
                 }
 
-                Vector3 FTotal = boid.velocity;
-                float avg = 1 / Mathf.Max(ForceInteractions, Mathf.Epsilon);
+                var FTotal = boid.velocity;
+                var avg = 1 / Mathf.Max(ForceInteractions, Mathf.Epsilon);
                 FRep *= avg;
                 //isnan
                 Gizmos.color = Color.yellow;
@@ -70,25 +68,22 @@ public class FlockingCPUValidation : MonoBehaviour
                 FTotal = Vector3.right; //+ FAli + FRep;
 
 
-                float currentForce = Mathf.Max(FTotal.magnitude, Mathf.Epsilon);
+                var currentForce = Mathf.Max(FTotal.magnitude, Mathf.Epsilon);
                 FTotal = FTotal / currentForce * boidModel.MaxForce;
-                Vector3 Acceleration = FTotal / boidModel.MassPerUnit;
+                var Acceleration = FTotal / boidModel.MassPerUnit;
                 Gizmos.color = Color.red;
                 Gizmos.DrawLine(boid.position, boid.position + Acceleration);
-                Vector3 Velocity = boid.velocity + Acceleration * Time.deltaTime;
-                float currentSpeed = Mathf.Max(Velocity.magnitude, Mathf.Epsilon);
+                var Velocity = boid.velocity + Acceleration * Time.deltaTime;
+                var currentSpeed = Mathf.Max(Velocity.magnitude, Mathf.Epsilon);
                 Velocity = Velocity / currentSpeed * Mathf.Min(currentSpeed, boidModel.MaxSpeed);
-                Vector3 position = boid.position + Velocity * Time.deltaTime;
+                var position = boid.position + Velocity * Time.deltaTime;
 
-                Vector3 r = boidBounds.ReflectPointInBounds(position);
+                var r = boidBounds.ReflectPointInBounds(position);
                 boid.velocity = (r - boid.position).normalized * Mathf.Min(currentSpeed, boidModel.MaxSpeed);
                 boid.position = boidBounds.ReflectPointInBounds(position);
                 Gizmos.color = Color.magenta;
                 Gizmos.DrawLine(boid.position, boid.position + Velocity);
-                if (Input.GetKey(KeyCode.A))
-                {
-                    boidsList[b] = boid;
-                }
+                if (Input.GetKey(KeyCode.A)) boidsList[b] = boid;
 
                 Gizmos.color = Color.black;
 
@@ -106,13 +101,13 @@ public class FlockingCPUValidation : MonoBehaviour
     private void PopulateBoids()
     {
         boidsList.Capacity = instances;
-        for (int i = 0; i < instances; i++)
+        for (var i = 0; i < instances; i++)
         {
             Vector4 pos = boidBounds.RandomPointInBounds();
             pos.w = 1;
             Vector4 vel = Random.insideUnitSphere.normalized;
             vel.w = Random.Range(1, 10);
-            boidsList.Add(new BoidData()
+            boidsList.Add(new BoidData
             {
                 position = pos,
                 velocity = vel

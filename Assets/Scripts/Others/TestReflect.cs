@@ -9,20 +9,20 @@ public class TestReflect : MonoBehaviour
     {
         if (pos != null && b != null)
         {
-            Vector3 p = pos.position;
-            Vector3 d = (Vector3.right + Vector3.forward) / 2;
+            var p = pos.position;
+            var d = (Vector3.right + Vector3.forward) / 2;
             Gizmos.DrawSphere(p, 0.1f);
             Gizmos.DrawLine(p, p + d * 0.1f);
 
-            for (int i = 2; i < 4; i++)
+            for (var i = 2; i < 4; i++)
             {
-                Vector3 rp = b.ReflectPointInBounds(p);
-                Vector3 pp = b.ReflectPointInBounds(p + d * i * 0.1f);
-                Vector3 np = p + d * i * 0.1f;
+                var rp = b.ReflectPointInBounds(p);
+                var pp = b.ReflectPointInBounds(p + d * i * 0.1f);
+                var np = p + d * i * 0.1f;
 
-                int pinBounds = b.isPointInBounds(p) ? 1 : 0;
-                float a = (0.5f + (i / 10.0f) * 0.5f);
-                Vector3 nd = (-b.ClampPointToBounds(p) + pp).normalized;
+                var pinBounds = b.isPointInBounds(p) ? 1 : 0;
+                var a = 0.5f + i / 10.0f * 0.5f;
+                var nd = (-b.ClampPointToBounds(p) + pp).normalized;
                 d = Vector3.Lerp(nd, d, pinBounds);
 
                 Gizmos.color = a * (pinBounds > 0 ? Color.cyan : Color.magenta);

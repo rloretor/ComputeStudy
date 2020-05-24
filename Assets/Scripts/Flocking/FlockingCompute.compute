@@ -125,11 +125,11 @@ void FlockingKernel (uint3 id : SV_DispatchThreadID)
         continue;
       }
       ForceInteractions +=1;
-      weight =smoothstep(0,1.0, 1.0f -min(sepLength /(oRadiusSqr), 1.0f));
+      weight =1.0f -min(sepLength /(oRadiusSqr), 1.0f);
       FAtt += neighbour.position;
       FAli += neighbour.velocity * weight; 
       weight =smoothstep(0,1.0, 1.0f -min(sepLength /(iRadiusSqr), 1.0f));
-      FRep += FOrSeparation  * weight;
+      FRep += FOrSeparation  * weight*2;
     }
     _ForceWeights*= 1 +exp(-(4-boid.scale)/4);
      if(ForceInteractions>0){
@@ -156,8 +156,8 @@ void FlockingKernel (uint3 id : SV_DispatchThreadID)
     _BoidsDebug[id.x] = _boidDebug;
     #endif
     
-    FRep = normalize( SafeNormalize(_BoidsNetForces[id.x])  + (hash31(id.x+_Time/4)*2.0-1)*length(boid.velocity)/2)*_MaxSpeed* (sepLength+0.1)  ;
-    _BoidsNetForces[id.x] =  _BoidsNetForces[id.x] *0.2f+ 0.8f* (SafeNormalize(FOrSeparation /weight    )*(_MaxForce+boid.scale))/(boid.scale * _MassPerUnit); 
+    //FRep = normalize( SafeNormalize(_BoidsNetForces[id.x])  + (hash31(id.x+_Time/4)*2.0-1)*length(boid.velocity)/2)*_MaxSpeed* (sepLength+0.1)  ;
+    _BoidsNetForces[id.x] =  _BoidsNetForces[id.x] *0.2f+ 0.8f* (SafeNormalize(FOrSeparation /weight)*(_MaxForce+boid.scale))/(boid.scale * _MassPerUnit); 
     _BoidsBuffer[id.x] = boid;
   
 }
