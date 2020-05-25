@@ -1,6 +1,6 @@
 ﻿#pragma kernel FlockingKernel
 #pragma kernel KinematicKernel
-//#define DEBUG
+#define DEBUG
 struct BoidData{
     float3 position;
     float scale;
@@ -112,25 +112,26 @@ void FlockingKernel (uint3 id : SV_DispatchThreadID)
   int ForceInteractions = 0;
   float3 FRep=0,FAtt=boid.position,FAli=0, FOrSeparation=0;
   _OuterRadius = _OuterRadius+boid.scale/2;
-  _InnerRadius = max(_OuterRadius,_InnerRadius+boid.scale/2);
-  float oRadiusSqr = _OuterRadius * _OuterRadius;
-  float iRadiusSqr = _InnerRadius * _InnerRadius;
+  _InnerRadius = min(_OuterRadius-0.1,_InnerRadius+boid.scale);
+  _OuterRadius = _OuterRadius * _OuterRadius;
+  _InnerRadius = _InnerRadius * _InnerRadius;
   
     for (uint bn = 0; bn < _Instances; bn++)
     {        
       BoidData neighbour = _BoidsBuffer[bn];
       FOrSeparation = boid.position - neighbour.position; //eparation vector using declared flot3 for register pressure
       sepLength =dot(FOrSeparation,FOrSeparation);
-      if(sepLength<=E || sepLength>(oRadiusSqr) ){
+      if(sepLength<=E || sepLength>(_OuterRadius) ){
         continue;
       }
       ForceInteractions +=1;
-      weight =1.0f -min(sepLength /(oRadiusSqr), 1.0f);
+      //weight =1.0f -min(sepLength /(oRadiusSqr), 1.0f);
       FAtt += neighbour.position;
+      weight  =1.0f -((sepLength-_InnerRadius) /(_OuterRadius-_InnerRadius));
       FAli += neighbour.velocity * weight; 
-      weight =smoothstep(0,1.0, 1.0f -min(sepLength /(iRadiusSqr), 1.0f));
-      FRep += FOrSeparation  * weight*2;
+      FRep += FOrSeparation  * weight*weight*2 ;
     }
+    FOrSeparation =0;
     _ForceWeights*= 1 +exp(-(4-boid.scale)/4);
      if(ForceInteractions>0){
          weight =1./ForceInteractions;
@@ -144,20 +145,23 @@ void FlockingKernel (uint3 id : SV_DispatchThreadID)
 
     FOrSeparation += FAtt*_ForceWeights.y;
     weight += _ForceWeights.y;
-    sepLength =1. / (1 + ForceInteractions*ForceInteractions + ForceInteractions ); // rathe separation force reusing register
-    //weight+= sepLength;
-    boid.dummy = sepLength;
-    
+
     #ifdef DEBUG
      BoidDebug _boidDebug = _BoidsDebug[id.x];
-     _boidDebug.FAli = FAli*_ForceWeights.z;
      _boidDebug.FRep = FRep*_ForceWeights.x;
+     _boidDebug.FAli = FAli * _ForceWeights.z ;
      _boidDebug.FAtt =  FAtt*_ForceWeights.y;
     _BoidsDebug[id.x] = _boidDebug;
     #endif
     
-    //FRep = normalize( SafeNormalize(_BoidsNetForces[id.x])  + (hash31(id.x+_Time/4)*2.0-1)*length(boid.velocity)/2)*_MaxSpeed* (sepLength+0.1)  ;
-    _BoidsNetForces[id.x] =  _BoidsNetForces[id.x] *0.2f+ 0.8f* (SafeNormalize(FOrSeparation /weight)*(_MaxForce+boid.scale))/(boid.scale * _MassPerUnit); 
+    sepLength = exp(-ForceInteractions/5); //reusing register
+    FOrSeparation += SafeNormalize(hash31(id.x+ceil(_Time/(boid.dummy+boid.scale)))*2.0-1) *sepLength;
+    weight+=sepLength;
+    
+    _BoidsNetForces[id.x] =lerp(_BoidsNetForces[id.x], SafeNormalize(FOrSeparation /weight)*((_MaxForce+boid.scale +float3(0,-9.8,0))/(boid.scale * _MassPerUnit)),0.8);
+    
+     weight  = length(_BoidsNetForces[id.x]);
+    _BoidsNetForces[id.x] = SafeNormalize(_BoidsNetForces[id.x]) * min(weight,_MaxForce);
     _BoidsBuffer[id.x] = boid;
   
 }
@@ -190,10 +194,10 @@ void KinematicKernel (uint3 id : SV_DispatchThreadID)
                     lerp(inverseDirection*_MaxSpeed,boid.velocity,boidInBounds)
                     ,min(length(boid.velocity),_MaxSpeed));
     boid.position = (boid.position+boid.velocity*_DeltaTime);
-    Vector  = _BoidsNetForces[id.x];
-   float currentMagnitude = length(Vector);
-    Vector = SetMagnitude( lerp(inverseDirection*_MaxForce,Vector,boidInBounds),currentMagnitude); 
-    _BoidsNetForces[id.x] = Vector*0.9;
+    //Vector  = _BoidsNetForces[id.x];
+   //float currentMagnitude = length(Vector);
+  //  Vector = SetMagnitude( lerp(inverseDirection*_MaxForce,Vector,boidInBounds),currentMagnitude); 
+    _BoidsNetForces[id.x] *=0.9;
     
     _BoidsBuffer[id.x] =boid;
 
