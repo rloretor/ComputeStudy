@@ -5,6 +5,9 @@ using UnityEngine;
 [Serializable]
 public class FlockingComputeController
 {
+    public ComputeBuffer DebugBuffer => debugBuffer;
+    public ComputeBuffer ForcesBuffer => boidForcesBuffer;
+
     private const int GroupSize = 512;
     private ComputeBuffer boidForcesBuffer;
 
@@ -21,6 +24,8 @@ public class FlockingComputeController
     private int KinematicKernel;
     private int ThreadGroupSize;
 
+    private List<BoidDebug> boidsForcesDebugList = new List<BoidDebug>();
+    private ComputeBuffer debugBuffer;
 
     private int instances => boidModel.instances;
 
@@ -37,13 +42,25 @@ public class FlockingComputeController
     private void InitForces()
     {
         boidsForcesList.Capacity = instances;
-        for (var i = 0; i < instances; i++) boidsForcesList.Add(Vector3.zero);
+        for (var i = 0; i < instances; i++)
+        {
+            boidsForcesList.Add(Vector3.zero);
+            boidsForcesDebugList.Add(new BoidDebug()
+            {
+                FAli = Vector3.zero,
+                FRep = Vector3.zero,
+                FAtt = Vector3.zero
+            });
+        }
     }
 
     private void InitBuffersCompute()
     {
         boidForcesBuffer = new ComputeBuffer(instances, sizeof(float) * 3);
         boidForcesBuffer.SetData(boidsForcesList);
+
+        debugBuffer = new ComputeBuffer(instances, sizeof(float) * 9);
+        debugBuffer.SetData(boidsForcesDebugList);
 
 
         IndirectComputeArgs = new[] {ThreadGroupSize, 1, 1};
@@ -59,6 +76,7 @@ public class FlockingComputeController
     {
         flockingShader.SetBuffer(FlockingKernel, "_BoidsBuffer", boidModel.BoidBuffer);
         flockingShader.SetBuffer(FlockingKernel, "_BoidsNetForces", boidForcesBuffer);
+        flockingShader.SetBuffer(FlockingKernel, "_BoidsDebug", debugBuffer);
 
         flockingShader.SetBuffer(KinematicKernel, "_BoidsBuffer", boidModel.BoidBuffer);
         flockingShader.SetBuffer(KinematicKernel, "_BoidsNetForces", boidForcesBuffer);
@@ -68,27 +86,37 @@ public class FlockingComputeController
     }
 
 
-    public void Compute()
+    public void Compute(bool debug)
     {
-        Dispatch();
+        Dispatch(debug);
 #if UNITY_EDITOR
         InitConstantBuffer();
-
 #endif
     }
 
 
-    private void Dispatch()
+    private void Dispatch(bool debug)
     {
         flockingShader.SetFloat("_DeltaTime", Time.deltaTime);
         flockingShader.SetFloat("_Time", Time.time);
         flockingShader.SetVector("_ForceWeights", boidModel.GetForceWeights());
 
-        flockingShader.DispatchIndirect(KinematicKernel, IndirectArgsThreadGroup);
-        // flockingShader.Dispatch(KinematicKernel, ThreadGroupSize, 1, 1);
-        if (Time.frameCount % 2 == 0)
-            flockingShader.DispatchIndirect(FlockingKernel, IndirectArgsThreadGroup);
-        //flockingShader.Dispatch(FlockingKernel, ThreadGroupSize, 1, 1);
+        if (debug)
+        {
+            flockingShader.Dispatch(KinematicKernel, ThreadGroupSize, 1, 1);
+            if (Time.frameCount % 2 == 0)
+            {
+                flockingShader.Dispatch(FlockingKernel, ThreadGroupSize, 1, 1);
+            }
+        }
+        else
+        {
+            flockingShader.DispatchIndirect(KinematicKernel, IndirectArgsThreadGroup);
+            if (Time.frameCount % 2 == 0)
+            {
+                flockingShader.DispatchIndirect(FlockingKernel, IndirectArgsThreadGroup);
+            }
+        }
     }
 
 
