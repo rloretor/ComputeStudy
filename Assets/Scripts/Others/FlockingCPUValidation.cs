@@ -20,8 +20,6 @@ public class FlockingCPUValidation : MonoBehaviour
     {
         if (boidsList.Count > 0)
         {
-            float step = 0;
-
             for (var b = 0; b < boidsList.Count; b++)
             {
                 var boid = boidsList[b];

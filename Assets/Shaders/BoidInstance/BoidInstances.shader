@@ -119,7 +119,7 @@ Blend One Zero // Premultiplied transparency
                 o.wPos = v.vertex;
                 o.sphereWPos = boid.position;
                 o.rayD = (o.wPos -_WorldSpaceCameraPos.xyz);
-                o.color = float4(boid.velocity,boid.dummy);
+                o.color = float4(boid.velocity,boid.scale.r);
                 o.vertex = mul(UNITY_MATRIX_VP,v.vertex);
                 o.uv =v.uv;
                 return o;
@@ -156,18 +156,18 @@ Blend One Zero // Premultiplied transparency
             }
             f2s frag (v2f i) : SV_Target
             {
-            f2s o;
+                f2s o;
                 float2 uv =  i.uv *2 -1;
                 float3 N = normalize(i.N);
                   #ifdef ISBILLBOARD
                     float3 D = normalize(i.rayD);
                     Ellipsoid e;
                     e.cen =i.sphereWPos;
-                    e.rad = _SphereRadius+ abs(SafeNormalize(i.color.xyz))*_SphereRadius;
-                   // float d =  sphere(_WorldSpaceCameraPos.xyz,D,i.sphereWPos,(_SphereRadius*i.color.x)/2);
-                    float d =  ellipsoid( _WorldSpaceCameraPos.xyz
-                                        , D
-                                        ,e);
+                    e.rad = abs(SafeNormalize(i.color.xyz))*i.color.w;
+                    float d =  sphere(_WorldSpaceCameraPos.xyz,D,i.sphereWPos,(_SphereRadius*i.color.w)/2);
+                    //float d =  ellipsoid( _WorldSpaceCameraPos.xyz
+                    //                    , D
+                    //                    ,e);
                     clip(d);
                     float4 p = float4(_WorldSpaceCameraPos.xyz+  D * d,1);
                     N = normalize( p -i.sphereWPos);
