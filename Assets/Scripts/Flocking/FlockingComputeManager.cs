@@ -12,11 +12,14 @@ public class FlockingComputeManager : MonoBehaviour
 
     private void OnDrawGizmos()
     {
-        Gizmos.color = Color.black;
-        Gizmos.DrawWireCube(boidModel.boidBounds.center, boidModel.boidBounds.size);
-        if (debug)
+        if (this.isActiveAndEnabled)
         {
-            DebugForces();
+            Gizmos.color = Color.black;
+            Gizmos.DrawWireCube(boidModel.boidBounds.center, boidModel.boidBounds.size);
+            if (debug)
+            {
+                DebugForces();
+            }
         }
     }
 
@@ -31,7 +34,7 @@ public class FlockingComputeManager : MonoBehaviour
     private void Update()
     {
         flockingCompute.Compute(debug);
-        flockingDrawer.SetShader();
+        flockingDrawer.Draw();
     }
 
     private void DebugForces()
@@ -66,7 +69,6 @@ public class FlockingComputeManager : MonoBehaviour
 
     private void LateUpdate()
     {
-        flockingDrawer.Draw();
     }
 
     private void OnDestroy()

@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 [Serializable]
 public class FlockingComputeController
@@ -30,13 +31,20 @@ public class FlockingComputeController
     private int instances => boidModel.instances;
 
 
-    public void Init(BoidModel boidData)
+    public void Init(BoidModel boidData, CommandBuffer command = null)
     {
         boidModel = boidData;
         ThreadGroupSize = Mathf.CeilToInt((float) instances / GroupSize);
         InitForces();
         InitBuffersCompute();
-        SetComputeShaderBuffers();
+        if (command == null)
+        {
+            SetComputeShaderBuffers();
+        }
+        else
+        {
+            CommandSetComputeShaderBuffers(command);
+        }
     }
 
     private void InitForces()
@@ -85,13 +93,54 @@ public class FlockingComputeController
         InitConstantBuffer();
     }
 
+    private void CommandSetComputeShaderBuffers(CommandBuffer command)
+    {
+        command.SetComputeBufferParam(flockingShader, FlockingKernel, "_BoidsBuffer", boidModel.BoidBuffer);
+        command.SetComputeBufferParam(flockingShader, FlockingKernel, "_BoidsNetForces", boidForcesBuffer);
+        command.SetComputeBufferParam(flockingShader, FlockingKernel, "_BoidsDebug", debugBuffer);
+
+        command.SetComputeBufferParam(flockingShader, KinematicKernel, "_BoidsBuffer", boidModel.BoidBuffer);
+        command.SetComputeBufferParam(flockingShader, KinematicKernel, "_BoidsNetForces", boidForcesBuffer);
+
+
+        InitConstantBuffer();
+    }
+
 
     public void Compute(bool debug)
     {
         Dispatch(debug);
-#if UNITY_EDITOR
-        InitConstantBuffer();
-#endif
+    }
+
+    public void Compute(CommandBuffer command, bool debug)
+    {
+        CommandDispatch(command, debug);
+    }
+
+
+    private void CommandDispatch(CommandBuffer command, bool debug)
+    {
+        command.SetComputeFloatParam(flockingShader, "_DeltaTime", Time.deltaTime);
+        command.SetComputeFloatParam(flockingShader, "_Time", Time.time);
+        command.SetComputeVectorParam(flockingShader, "_ForceWeights", boidModel.GetForceWeights());
+
+        if (debug)
+        {
+            command.DispatchCompute(flockingShader, KinematicKernel, ThreadGroupSize, 1, 1);
+            if (Time.frameCount % 2 == 0)
+            {
+                command.DispatchCompute(flockingShader, FlockingKernel, ThreadGroupSize, 1, 1);
+            }
+        }
+        else
+        {
+            command.DispatchCompute(flockingShader, KinematicKernel, IndirectArgsThreadGroup, 0);
+            //flockingShader.DispatchIndirect(KinematicKernel, IndirectArgsThreadGroup);
+            if (Time.frameCount % 2 == 0)
+            {
+                command.DispatchCompute(flockingShader, FlockingKernel, IndirectArgsThreadGroup, 0);
+            }
+        }
     }
 
 
@@ -120,7 +169,7 @@ public class FlockingComputeController
     }
 
 
-    private void InitConstantBuffer()
+    public void InitConstantBuffer()
     {
         flockingShader.SetInt("_Instances", instances);
         flockingShader.SetInt("_MassPerUnit", boidModel.MassPerUnit);

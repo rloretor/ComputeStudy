@@ -8,7 +8,7 @@
         Tags { "RenderType"="Opaque"}
         LOD 100
         ZWrite On
-Blend One Zero // Premultiplied transparency
+        //Blend One Zero // Premultiplied transparency
         Pass
         {
             CGPROGRAM
@@ -161,22 +161,22 @@ Blend One Zero // Premultiplied transparency
                 float3 N = normalize(i.N);
                   #ifdef ISBILLBOARD
                     float3 D = normalize(i.rayD);
-                    Ellipsoid e;
-                    e.cen =i.sphereWPos;
-                    e.rad = abs(SafeNormalize(i.color.xyz))*i.color.w;
+                   //Ellipsoid e;
+                   //e.cen =i.sphereWPos;
+                   //e.rad = abs(SafeNormalize(i.color.xyz))*i.color.w;
                     float d =  sphere(_WorldSpaceCameraPos.xyz,D,i.sphereWPos,(_SphereRadius*i.color.w)/2);
                     //float d =  ellipsoid( _WorldSpaceCameraPos.xyz
                     //                    , D
                     //                    ,e);
                     clip(d);
                     float4 p = float4(_WorldSpaceCameraPos.xyz+  D * d,1);
-                    N = normalize( p -i.sphereWPos);
+                    //N = normalize( p -i.sphereWPos);
                     p = mul(UNITY_MATRIX_VP,float4(p.xyz,1));
                     o.depth = p.z/p.w;
                 #endif
                 
                 float3 L = _WorldSpaceLightPos0;
-                o.color=   float4(N,1);//dot(N,L) ;
+                o.color=   float4(N*0.5+0.5,1);//dot(N,L) ;
                 return o;
             }
             ENDCG

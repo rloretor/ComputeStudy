@@ -154,11 +154,13 @@ void FlockingKernel (uint3 id : SV_DispatchThreadID)
     _BoidsDebug[id.x] = _boidDebug;
     #endif
     
-    sepLength = exp(-ForceInteractions/5); //reusing register
+    sepLength = exp(-ForceInteractions/5.); //reusing register
     FOrSeparation += SafeNormalize(hash31(id.x+ceil(_Time/(boid.dummy+boid.scale)))*2.0-1) *sepLength;
     weight+=sepLength;
     
-    _BoidsNetForces[id.x] =lerp(_BoidsNetForces[id.x], SafeNormalize(FOrSeparation /weight)*((_MaxForce+boid.scale +float3(0,-9.8,0))/(boid.scale * _MassPerUnit)),0.8);
+    _BoidsNetForces[id.x] =lerp(_BoidsNetForces[id.x],
+     SafeNormalize(FOrSeparation /weight)*((_MaxForce+boid.scale)/(boid.scale * _MassPerUnit))
+     ,0.8);
     
      weight  = length(_BoidsNetForces[id.x]);
     _BoidsNetForces[id.x] = SafeNormalize(_BoidsNetForces[id.x]) * min(weight,_MaxForce);
