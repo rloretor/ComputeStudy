@@ -4,26 +4,29 @@
     {
       _asigma ("A Sigma", Range(0.0,100)) =10 
       _bsigma ("B Sigma", Range(0.0,100)) =0.1 
-      _zThreshold ("Z difference", Range(.0,10)) =1
-      _Aux ("aux", Float) =1
+      _zThreshold ("Z difference", Range(.0,100)) =1
+      _BlurAmount ("Blur Amount", Float) =1
+      _roughness ("roughness", Float) =1
     }
     SubShader
     {
-        Tags { "RenderType"="Opaque" "LightMode" = "ForwardAdd" }
-        LOD 100
 
 CGINCLUDE
+            #include "UnityCG.cginc"
+            #include "Lighting.cginc"
   struct appdata
             {
                 float4 vertex : POSITION;
                 float2 uv : TEXCOORD0;
+                
             };
 
             struct v2f
             {
-                float2 uv : TEXCOORD0;
-                float4 vertex : SV_POSITION;
                 float4 ProjectionSpace: TEXCOORD1;
+                float4 vertex : SV_POSITION;
+                float3 viewDir:TEXCOORD2;
+                float2 uv : TEXCOORD0;
             };
 
 
@@ -35,17 +38,18 @@ CGINCLUDE
                 o.vertex = UnityObjectToClipPos( v.vertex);
                 o.uv = v.uv ;
                 o.ProjectionSpace = o.vertex;
+                o.viewDir = WorldSpaceViewDir(v.vertex);
                 return o;
             }
 ENDCG
         Pass
         {
-            ZWrite On
-            CGPROGRAM
+
+             CGPROGRAM
             #pragma vertex vert
             #pragma fragment frag
 
-            #include "UnityCG.cginc"
+
                        
             sampler2D Fluid; 
             sampler2D FluidNormals; 
@@ -58,9 +62,12 @@ ENDCG
             float _asigma; 
             float _bsigma; 
             float _zThreshold; 
-            float _Aux;
-            #define KernelSize  15
+            float _BlurAmount;
+            float _roughness;
+            float3 _mainLightDir;
+            #define KernelSize  11
             #define kSize  (KernelSize-1)/2
+            #define Pi  acos(-1)
 
             float SmoothDepth(float2 uv)
             {
@@ -100,6 +107,24 @@ ENDCG
             }
             
             
+            float CharlieD(float roughness, float ndoth)
+            {
+                float invR = 1. / roughness;
+                float cos2h = ndoth * ndoth;
+                float sin2h = 1. - cos2h;
+                return (2. + invR) * pow(sin2h, invR * .5) / (2. * Pi);
+            }
+             
+            float AshikhminV(float ndotv, float ndotl)
+            {
+                return 1. / (4. * (ndotl + ndotv - ndotl * ndotv));
+            }
+                      
+             float3 FresnelTerm(float3 specularColor, float vdoth)
+            {
+            	float3 fresnel = specularColor + (1. - specularColor) * pow((1. - vdoth), 5.);
+            	return fresnel;
+            }   
              float3 SmoothNormals(float2 uv)
             {
                 
@@ -119,7 +144,7 @@ ENDCG
 	            float ll;
 	            float factor;
 	            float normalizationFactor = 1/gaussProfile(0.0, _bsigma);
-	            float texelSize = lerp(1,2,1-l)/ _ScreenParams.xy;
+	            float texelSize = lerp(1,_BlurAmount,1-l)/ _ScreenParams.xy;
 	            //read out the texels
 	            for (int i=-kSize; i <= kSize; ++i)
 	            {
@@ -128,39 +153,57 @@ ENDCG
 	            		cc =tex2D(FluidNormals,uv+ float2(float(i),float(j))*texelSize );
 	            		cc = normalize(cc*2-1);
 	            		ll = Linear01Depth(tex2D(Fluid,uv+ float2(float(i),float(j))*texelSize ).r);
-                       if(abs(LinearEyeDepth(tex2D(Fluid,uv+ float2(float(i),float(j))*texelSize ).r)-LinearEyeDepth(tex2D(Fluid,uv).r))<_zThreshold){
+                       //if(abs(LinearEyeDepth(tex2D(Fluid,uv+ float2(float(i),float(j))*texelSize ).r)-LinearEyeDepth(tex2D(Fluid,uv).r))<_zThreshold){
 	            		    factor = gaussProfile((ll-l), _bsigma)*normalizationFactor*kernel[kSize+j]*kernel[kSize+i];
 	            		    Z += factor;
 	            		    final_colour += factor*cc;
-	            		}
+	            		//}
 	            	}
+	            	
 	            } 
 	            return normalize(final_colour/Z);
             }
+            float3 pal( in float t, in float3 a, in float3 b, in float3 c, in float3 d )
+            {
+                return a + b*cos( 6.28318*(c*t+d) );
+            }
 
-           
+            #define BOIDPALETTE(p) pal( p,float3(0.5,0.5,0.5),float3(0.5,0.5,0.5),float3(1.0,1.0,0.5),float3(0.8,0.90,0.30) )
+
             float3 frag (v2f i) : SV_Target
             {
                 float AR = _ScreenParams.x/_ScreenParams.y;
                 float2 ClipPos = i.ProjectionSpace.xy/i.ProjectionSpace.w;
                 ClipPos = (ClipPos+1.)/2.0;
                 
-				#if UNITY_UV_STARTS_AT_TOP
-					ClipPos.y = 1-ClipPos.y;
-				#endif	
+				//#if UNITY_UV_STARTS_AT_TOP
+				//	ClipPos.y = 1-ClipPos.y;
+				//#endif	
      
 
-             if(Linear01Depth(tex2D(Fluid,ClipPos)) >=0.99   ){
+             if(Linear01Depth(tex2D(Fluid,ClipPos)) >=1   ){
                  discard;
              }
-               
-             float b = Linear01Depth (tex2D(Fluid,ClipPos));
-             return  b +dot( SmoothNormals(ClipPos).xyz , normalize(float3(1,1,0)));
+             float3 N = SmoothNormals(ClipPos).xyz;
+             float3 L = -_mainLightDir;
+             float3 V = normalize(i.viewDir);
+             float3 H = normalize(L +V);
+            float dotnh = saturate(dot(N,H));
+            float dotnv = saturate(dot(N,V));
+            float dotnl = saturate(dot(N,L));
+            float3 dotvh = saturate(dot(V,H));
+             float d = CharlieD(_roughness, dotnh);
+        	 float v = AshikhminV(dotnv, dotnl);
+             float3  f = FresnelTerm(1, dotvh);
+             float3 C =BOIDPALETTE(_WorldSpaceCameraPos + V*LinearEyeDepth(tex2D(Fluid,ClipPos)));
+             float3 specular = f * d * v * Pi * dotnl;
+             return dotnl*float3(61,106,244)/255  ;
             }
             ENDCG
         }
         
-        
+        //unused depth normal recovery.
+        /*
          Pass
         {   
          ZWrite On
@@ -270,5 +313,6 @@ ENDCG
             }
             ENDCG
         }
+        */
     }
 }

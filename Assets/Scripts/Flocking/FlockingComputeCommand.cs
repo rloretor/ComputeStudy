@@ -7,6 +7,7 @@ namespace Flocking
 {
     public class FlockingComputeCommand : MonoBehaviour
     {
+        public Light mainLight;
         public bool debug;
         private Dictionary<Camera, CommandBuffer> commandBufferMap = new Dictionary<Camera, CommandBuffer>();
         [Header("Rendering")] [SerializeField] private CameraEvent WhenToRender;
@@ -18,6 +19,8 @@ namespace Flocking
 
         [SerializeField] private Mesh FSQ;
         [SerializeField] private Material FSQMat;
+
+
         private int fluidDepthID = Shader.PropertyToID("FluidDepth");
         private int fluidNormalID = Shader.PropertyToID("FluidNormals");
         RenderTargetIdentifier[] fluidRenderTargets;
@@ -112,9 +115,9 @@ namespace Flocking
             }
 
             var rt = RenderTexture.active;
-            commandBuffer.GetTemporaryRT(fluidDepthID, -1, -1, 32, FilterMode.Bilinear,
+            commandBuffer.GetTemporaryRT(fluidDepthID, -1, -1, 16, FilterMode.Trilinear,
                 RenderTextureFormat.Depth);
-            commandBuffer.GetTemporaryRT(fluidNormalID, -1, -1, 0, FilterMode.Bilinear,
+            commandBuffer.GetTemporaryRT(fluidNormalID, -1, -1, 0, FilterMode.Trilinear,
                 RenderTextureFormat.Default);
 
             commandBuffer.SetRenderTarget(new RenderTargetIdentifier[] {fluidNormalID}, fluidDepthID);
@@ -129,6 +132,7 @@ namespace Flocking
             commandBuffer.ReleaseTemporaryRT(fluidNormalID);
             //commandBuffer.SetRenderTarget(rt);
             // commandBuffer.ClearRenderTarget(false, true, Color.black);
+
             commandBuffer.Blit(BuiltinRenderTextureType.CurrentActive, rt, FSQMat,
                 0);
             commandBuffer.SetRenderTarget(rt);
@@ -140,6 +144,7 @@ namespace Flocking
         {
             flockingCompute.InitConstantBuffer();
             flockingDrawer.SetShader();
+            FSQMat?.SetVector("_mainLightDir", mainLight.transform.forward);
         }
 
         private void CleanNullCameras()

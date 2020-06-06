@@ -8,7 +8,6 @@
         Tags { "RenderType"="Opaque"}
         LOD 100
         ZWrite On
-        //Blend One Zero // Premultiplied transparency
         Pass
         {
             CGPROGRAM
@@ -94,8 +93,7 @@
             };
             
 
-            //https://www.shadertoy.com/view/ll2GD3
-            #define BOIDPALETTE(p) pal( p,float3(0.5,0.5,0.5),float3(0.5,0.5,0.5),float3(1.0,1.0,0.5),float3(0.8,0.90,0.30) )
+
             #define Rot(a)  float2x2(cos(a), sin(a),-sin(a), cos(a))
             v2f vert (appdata v, uint instanceID : SV_InstanceID)
             {
@@ -124,6 +122,7 @@
                 o.uv =v.uv;
                 return o;
             }
+            #ifdef ISBILLBOARD
            float sphere(float3 ray, float3 dir, float3 center, float radius)
             {
                 float3 rc = ray-center;
@@ -154,6 +153,7 @@
                 float d = dot(v,v);
                 return d<=E?0: v/sqrt(d);
             }
+            #endif
             f2s frag (v2f i) : SV_Target
             {
                 f2s o;
@@ -175,7 +175,6 @@
                     o.depth = p.z/p.w;
                 #endif
                 
-                float3 L = _WorldSpaceLightPos0;
                 o.color=   float4(N*0.5+0.5,1);//dot(N,L) ;
                 return o;
             }
