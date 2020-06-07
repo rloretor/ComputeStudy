@@ -36,7 +36,7 @@
             StructuredBuffer<BoidData> _BoidsBuffer;
             float _SphereRadius;
             uint _Instances;
-
+            sampler2D _colorPalette;
             struct appdata
             {
                 float4 vertex : POSITION;
@@ -55,11 +55,13 @@
                 float3 N:TEXCOORD4;
                 float2 uv : TEXCOORD0;
                 
+                
             };
             
-            struct f2s
+            struct f2r
             {
-                float4 color : SV_Target;
+                half4 normal : SV_Target0;
+                half4 color : SV_Target1;
                 float depth : SV_Depth;
             };
 
@@ -82,10 +84,7 @@
                 return frac(sin(q)*43758.5453);
             }
             
-            float3 pal( in float t, in float3 a, in float3 b, in float3 c, in float3 d )
-            {
-                return a + b*cos( 6.28318*(c*t+d) );
-            }
+
             struct Ellipsoid
             {
                 float3 cen;
@@ -117,7 +116,7 @@
                 o.wPos = v.vertex;
                 o.sphereWPos = boid.position;
                 o.rayD = (o.wPos -_WorldSpaceCameraPos.xyz);
-                o.color = float4(boid.velocity,boid.scale.r);
+                o.color = float4(boid.velocity,boid.dummy);
                 o.vertex = mul(UNITY_MATRIX_VP,v.vertex);
                 o.uv =v.uv;
                 return o;
@@ -153,12 +152,22 @@
                 float d = dot(v,v);
                 return d<=E?0: v/sqrt(d);
             }
+         
             #endif
-            f2s frag (v2f i) : SV_Target
+            half3 pal( in float t, in float3 a, in float3 b, in float3 c, in float3 d )
             {
-                f2s o;
+                return a + b*cos( 6.28318*(c*t+d) );
+            }
+
+            //#define BOIDPALETTE(p) pal( p,float3(0.5,0.5,0.5),float3(0.5,0.5,0.5),float3(1.0,1.0,0.5),float3(0.8,0.90,0.30) )
+            #define BOIDPALETTE(p)pal( p, float3(0.5,0.5,0.5),float3(0.5,0.5,0.5),float3(1.0,1.0,1.0),float3(0.0,0.10,0.20) )
+
+            f2r frag (v2f i) 
+            {
+                f2r o;
                 float2 uv =  i.uv *2 -1;
                 float3 N = normalize(i.N);
+                /*
                   #ifdef ISBILLBOARD
                     float3 D = normalize(i.rayD);
                    //Ellipsoid e;
@@ -174,8 +183,10 @@
                     p = mul(UNITY_MATRIX_VP,float4(p.xyz,1));
                     o.depth = p.z/p.w;
                 #endif
+                */
                 
-                o.color=   float4(N*0.5+0.5,1);//dot(N,L) ;
+                o.normal=   float4(N*0.5+0.5,1);//dot(N,L) ;
+                o.color =tex2D(  _colorPalette, float2(1-i.color.w,0));//dot(N,L) ;
                 return o;
             }
             ENDCG

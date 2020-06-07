@@ -17,12 +17,12 @@ namespace Flocking
         [SerializeField] private FlockingComputeController flockingCompute;
         [SerializeField] private FlockingDrawController flockingDrawer;
 
-        [SerializeField] private Mesh FSQ;
         [SerializeField] private Material FSQMat;
 
 
         private int fluidDepthID = Shader.PropertyToID("FluidDepth");
         private int fluidNormalID = Shader.PropertyToID("FluidNormals");
+        private int fluidColorID = Shader.PropertyToID("FluidColor");
         RenderTargetIdentifier[] fluidRenderTargets;
 
 
@@ -115,19 +115,24 @@ namespace Flocking
             }
 
             var rt = RenderTexture.active;
-            commandBuffer.GetTemporaryRT(fluidDepthID, -1, -1, 16, FilterMode.Trilinear,
+            commandBuffer.GetTemporaryRT(fluidDepthID, -1, -1, 32, FilterMode.Bilinear,
                 RenderTextureFormat.Depth);
-            commandBuffer.GetTemporaryRT(fluidNormalID, -1, -1, 0, FilterMode.Trilinear,
+            commandBuffer.GetTemporaryRT(fluidNormalID, -1, -1, 0, FilterMode.Bilinear,
+                RenderTextureFormat.Default);
+            commandBuffer.GetTemporaryRT(fluidColorID, -1, -1, 0, FilterMode.Bilinear,
                 RenderTextureFormat.Default);
 
-            commandBuffer.SetRenderTarget(new RenderTargetIdentifier[] {fluidNormalID}, fluidDepthID);
+            commandBuffer.SetGlobalTexture("Fluid", fluidDepthID);
+            commandBuffer.SetGlobalTexture("FluidNormals", fluidNormalID);
+            commandBuffer.SetGlobalTexture("FluidColors", fluidColorID);
+            var rts = new RenderTargetIdentifier[] {fluidNormalID, fluidColorID};
+            commandBuffer.SetRenderTarget(rts, fluidDepthID);
             //commandBuffer.SetRenderTarget(fluidDepthID);
             commandBuffer.ClearRenderTarget(true, true, Color.black);
             UpdateShaders();
             flockingCompute.Compute(commandBuffer, debug);
             flockingDrawer.CommandDraw(commandBuffer);
-            commandBuffer.SetGlobalTexture("Fluid", fluidDepthID);
-            commandBuffer.SetGlobalTexture("FluidNormals", fluidNormalID);
+
             commandBuffer.ReleaseTemporaryRT(fluidDepthID);
             commandBuffer.ReleaseTemporaryRT(fluidNormalID);
             //commandBuffer.SetRenderTarget(rt);

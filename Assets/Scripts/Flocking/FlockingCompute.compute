@@ -154,8 +154,9 @@ void FlockingKernel (uint3 id : SV_DispatchThreadID)
     _BoidsDebug[id.x] = _boidDebug;
     #endif
     
-    sepLength = exp(-ForceInteractions/5.); //reusing register
-    FOrSeparation += SafeNormalize(hash31(id.x+ceil(_Time/(boid.dummy+boid.scale)))*2.0-1) *sepLength;
+    sepLength = exp(-ForceInteractions/100.); //reusing register
+    boid.dummy = 1-sepLength;
+    FOrSeparation += SafeNormalize(hash31(id.x+ceil(_Time/(boid.scale)))*2.0-1) *sepLength;
     weight+=sepLength;
     
     _BoidsNetForces[id.x] =lerp(_BoidsNetForces[id.x],
@@ -196,9 +197,6 @@ void KinematicKernel (uint3 id : SV_DispatchThreadID)
                     lerp(inverseDirection*_MaxSpeed,boid.velocity,boidInBounds)
                     ,min(length(boid.velocity),_MaxSpeed));
     boid.position = (boid.position+boid.velocity*_DeltaTime);
-    //Vector  = _BoidsNetForces[id.x];
-   //float currentMagnitude = length(Vector);
-  //  Vector = SetMagnitude( lerp(inverseDirection*_MaxForce,Vector,boidInBounds),currentMagnitude); 
     _BoidsNetForces[id.x] *=0.9;
     
     _BoidsBuffer[id.x] =boid;

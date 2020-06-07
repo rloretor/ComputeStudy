@@ -1,12 +1,12 @@
-﻿Shader "Unlit/SSQuad"
+﻿Shader "Unlit/SSFluidrenderer"
 {
     Properties
     {
-      _asigma ("A Sigma", Range(0.0,100)) =10 
-      _bsigma ("B Sigma", Range(0.0,100)) =0.1 
-      _zThreshold ("Z difference", Range(.0,100)) =1
+      _asigma ("A Sigma", Range(0.0,10)) =10 
+      _bsigma ("B Sigma", Range(0.0,2)) =0.1 
       _BlurAmount ("Blur Amount", Float) =1
-      _roughness ("roughness", Float) =1
+      _zThreshold ("Z Amount", Float) =1.
+
     }
     SubShader
     {
@@ -45,91 +45,41 @@ ENDCG
         Pass
         {
 
+             ZWrite On
              CGPROGRAM
             #pragma vertex vert
             #pragma fragment frag
 
-
-                       
-            sampler2D Fluid; 
-            sampler2D FluidNormals; 
-  
+            #define KernelSize  15
+            #define kSize  (KernelSize-1)/2
+            #define Pi  acos(-1)
             #define oneOverSqrt2pi 0.398942280401
-            float gaussProfile(float x ,float sigma){
-             return oneOverSqrt2pi * 1/sigma * exp(-0.5*x*x/(sigma*sigma));
-            }
             
             float _asigma; 
             float _bsigma; 
             float _zThreshold; 
             float _BlurAmount;
-            float _roughness;
             float3 _mainLightDir;
-            #define KernelSize  11
-            #define kSize  (KernelSize-1)/2
-            #define Pi  acos(-1)
-
-            float SmoothDepth(float2 uv)
-            {
-                
-	            float kernel[KernelSize];
-	            float final_colour = 0;
-	            
-	            float Z = 0.0;
-	            for (int j = 0; j <= kSize; ++j)
-	            {
-	            	kernel[kSize+j] = kernel[kSize-j] = gaussProfile(float(j), _asigma);
-	            }
-	            
-	            float c = tex2D(Fluid,uv).r;
-	            float l = Linear01Depth(c);
-	            float cc,ll;
-	            float factor;
-	            float normalizationFactor = 1.0/gaussProfile(0.0, _bsigma);
-	            float texelSize = 1./ _ScreenParams.xy;
-	            //read out the texels
-	            for (int i=-kSize; i <= kSize; ++i)
-	            {
-	            	for (int j=-kSize; j <= kSize; ++j)
-	            	{	            	     
-	            		cc =tex2D(Fluid,uv+ float2(float(i),float(j))*texelSize ).r;
-	            		ll = Linear01Depth(cc);
-                        if( (ll-l)/_zThreshold <=1){
-	            		    factor = gaussProfile(1-(ll-l), _bsigma)*normalizationFactor*kernel[kSize+j]*kernel[kSize+i];
-	            		    Z += factor;
-	            		    final_colour += factor*ll;
-	            		}
-	            		
-	            		
-	            	}
-	            } 
-	            return final_colour/Z;
+           
+                       
+            sampler2D Fluid; 
+            sampler2D FluidColor; 
+            sampler2D FluidNormals; 
+  
+            float gaussProfile(float x ,float sigma){
+             return oneOverSqrt2pi * 1/sigma * exp(-0.5*x*x/(sigma*sigma));
             }
             
-            
-            float CharlieD(float roughness, float ndoth)
-            {
-                float invR = 1. / roughness;
-                float cos2h = ndoth * ndoth;
-                float sin2h = 1. - cos2h;
-                return (2. + invR) * pow(sin2h, invR * .5) / (2. * Pi);
-            }
-             
-            float AshikhminV(float ndotv, float ndotl)
-            {
-                return 1. / (4. * (ndotl + ndotv - ndotl * ndotv));
-            }
                       
              float3 FresnelTerm(float3 specularColor, float vdoth)
             {
             	float3 fresnel = specularColor + (1. - specularColor) * pow((1. - vdoth), 5.);
             	return fresnel;
             }   
-             float3 SmoothNormals(float2 uv)
+             void SmoothTargets(float2 uv,inout float3 nnn, inout float3 ccc,inout float ddd)
             {
                 
 	            float kernel[KernelSize];
-	            float3 final_colour = 0;
 	            
 	            float Z = 0.0;
 	            for (int j = 0; j <= kSize; ++j)
@@ -137,11 +87,15 @@ ENDCG
 	            	kernel[kSize+j] = kernel[kSize-j] = gaussProfile(float(j), _asigma);
 	            }
 	            
-	            float3 c = tex2D(FluidNormals,uv);
-	            c= normalize(c*2.-1);
-	            float l = Linear01Depth(tex2D(Fluid,uv).r);
+	            float3 c = tex2D(FluidColor,uv);
+	            float3 n = tex2D(FluidNormals,uv);
+	            n= (n*2.-1);
+	            float d = tex2D(Fluid,uv).r;
+	            float l = Linear01Depth(d);
+	            float3 nn;
 	            float3 cc;
 	            float ll;
+	            float dd;
 	            float factor;
 	            float normalizationFactor = 1/gaussProfile(0.0, _bsigma);
 	            float texelSize = lerp(1,_BlurAmount,1-l)/ _ScreenParams.xy;
@@ -150,28 +104,33 @@ ENDCG
 	            {
 	            	for (int j=-kSize; j <= kSize; ++j)
 	            	{	            	     
-	            		cc =tex2D(FluidNormals,uv+ float2(float(i),float(j))*texelSize );
-	            		cc = normalize(cc*2-1);
-	            		ll = Linear01Depth(tex2D(Fluid,uv+ float2(float(i),float(j))*texelSize ).r);
+	            		nn =tex2D(FluidNormals,uv+ float2(float(i),float(j))*texelSize );
+	            		cc =tex2D(FluidColor,uv+ float2(float(i),float(j))*texelSize );
+	            		nn = (nn*2-1);
+	            		dd =tex2D(Fluid,uv+ float2(float(i),float(j))*texelSize ).r;
+	            		ll = Linear01Depth(dd);
                        //if(abs(LinearEyeDepth(tex2D(Fluid,uv+ float2(float(i),float(j))*texelSize ).r)-LinearEyeDepth(tex2D(Fluid,uv).r))<_zThreshold){
-	            		    factor = gaussProfile((ll-l), _bsigma)*normalizationFactor*kernel[kSize+j]*kernel[kSize+i];
+	            		    factor = gaussProfile(abs(ll-l), _bsigma)*normalizationFactor*kernel[kSize+j]*kernel[kSize+i];
 	            		    Z += factor;
-	            		    final_colour += factor*cc;
+	            		    nnn += factor*nn;
+	            		    ccc += factor*cc;
+	            		    ddd+= factor*dd;
 	            		//}
 	            	}
 	            	
 	            } 
-	            return normalize(final_colour/Z);
+	            nnn = normalize(nnn/Z);
+	            ccc = ccc/Z;
+	            ddd=ddd/Z;
             }
-            float3 pal( in float t, in float3 a, in float3 b, in float3 c, in float3 d )
+            struct f2r
             {
-                return a + b*cos( 6.28318*(c*t+d) );
-            }
-
-            #define BOIDPALETTE(p) pal( p,float3(0.5,0.5,0.5),float3(0.5,0.5,0.5),float3(1.0,1.0,0.5),float3(0.8,0.90,0.30) )
-
-            float3 frag (v2f i) : SV_Target
+                float3 color : SV_Target;
+                float depth : SV_Depth;
+            };
+            f2r frag (v2f i) : SV_Target
             {
+                f2r o;
                 float AR = _ScreenParams.x/_ScreenParams.y;
                 float2 ClipPos = i.ProjectionSpace.xy/i.ProjectionSpace.w;
                 ClipPos = (ClipPos+1.)/2.0;
@@ -181,23 +140,21 @@ ENDCG
 				//#endif	
      
 
-             if(Linear01Depth(tex2D(Fluid,ClipPos)) >=1   ){
+             if(Linear01Depth(tex2D(Fluid,ClipPos)) >=0.99   ){
                  discard;
              }
-             float3 N = SmoothNormals(ClipPos).xyz;
+             float3 N, C;
+             float D;
+             SmoothTargets(ClipPos,N,C,D);
              float3 L = -_mainLightDir;
              float3 V = normalize(i.viewDir);
              float3 H = normalize(L +V);
-            float dotnh = saturate(dot(N,H));
-            float dotnv = saturate(dot(N,V));
-            float dotnl = saturate(dot(N,L));
-            float3 dotvh = saturate(dot(V,H));
-             float d = CharlieD(_roughness, dotnh);
-        	 float v = AshikhminV(dotnv, dotnl);
-             float3  f = FresnelTerm(1, dotvh);
-             float3 C =BOIDPALETTE(_WorldSpaceCameraPos + V*LinearEyeDepth(tex2D(Fluid,ClipPos)));
-             float3 specular = f * d * v * Pi * dotnl;
-             return dotnl*float3(61,106,244)/255  ;
+             float dotnh = saturate(dot(N,H));
+             float3  f = FresnelTerm(1, saturate(dot(V,H)));
+             float3 R = reflect(-L,N);
+             o.color= C* dot(N,L);//float3(61,106,244)/255  ;
+             o.depth =tex2D(Fluid,ClipPos).r;
+             return o;
             }
             ENDCG
         }
@@ -206,7 +163,7 @@ ENDCG
         /*
          Pass
         {   
-         ZWrite On
+
                 
             CGPROGRAM
             #pragma vertex vert

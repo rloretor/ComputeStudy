@@ -50,7 +50,7 @@ public class BoidModel
             {
                 position = pos,
                 velocity = vel,
-                scale = Mathf.Pow(Random.Range(1, 2.0f), 2),
+                scale = Mathf.Pow(Random.Range(1.4f, 2f), 2),
                 dummy = Random.Range(0.0f, 1.0f)
             });
         }

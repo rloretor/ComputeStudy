@@ -14,11 +14,15 @@ public class FlockingDrawController
     private BoidModel boidModel;
     [SerializeField] private bool isbillboard = true;
     [SerializeField] [Range(0, 5.0f)] private float particleSize;
+    [SerializeField] private Gradient ColorPalette;
 
+    [SerializeField] private Texture2D ColorPaletteTexture;
 
     public void Init(BoidModel boidModel, CommandBuffer command = null)
     {
         this.boidModel = boidModel;
+
+        InitTexture();
 
         boidDrawMaterial = new Material(BoidInstanceShader)
         {
@@ -39,8 +43,31 @@ public class FlockingDrawController
         }
     }
 
+    private void InitTexture()
+    {
+        ColorPaletteTexture = new Texture2D(10, 1);
+
+        ColorPaletteTexture.SetPixels(new[]
+        {
+            ColorPalette.Evaluate(0),
+            ColorPalette.Evaluate(0.1f),
+            ColorPalette.Evaluate(0.2f),
+            ColorPalette.Evaluate(0.3f),
+            ColorPalette.Evaluate(0.4f),
+            ColorPalette.Evaluate(0.5f),
+            ColorPalette.Evaluate(0.6f),
+            ColorPalette.Evaluate(0.7f),
+            ColorPalette.Evaluate(0.8f),
+            ColorPalette.Evaluate(0.9f),
+            ColorPalette.Evaluate(1),
+        });
+        ColorPaletteTexture.filterMode = FilterMode.Bilinear;
+        ColorPaletteTexture.Apply();
+    }
+
     public void SetShader()
     {
+        boidDrawMaterial.SetTexture("_colorPalette", ColorPaletteTexture);
         boidDrawMaterial.SetFloat("_SphereRadius", particleSize / 2.0f);
 
         if (isbillboard)
