@@ -5,7 +5,7 @@
       _asigma ("A Sigma", Range(0.0,10)) =10 
       _bsigma ("B Sigma", Range(0.0,2)) =0.1 
       _BlurAmount ("Blur Amount", Float) =1
-      _zThreshold ("Z Amount", Float) =1.
+      _zThreshold ("Z Amount", Range(0.0,1)) =1.
 
     }
     SubShader
@@ -92,10 +92,8 @@ ENDCG
 	            n= (n*2.-1);
 	            float d = tex2D(Fluid,uv).r;
 	            float l = Linear01Depth(d);
-	            float3 nn;
-	            float3 cc;
-	            float ll;
-	            float dd;
+	            float3 nn, cc;
+	            float ll, dd;
 	            float factor;
 	            float normalizationFactor = 1/gaussProfile(0.0, _bsigma);
 	            float texelSize = lerp(1,_BlurAmount,1-l)/ _ScreenParams.xy;
@@ -109,13 +107,13 @@ ENDCG
 	            		nn = (nn*2-1);
 	            		dd =tex2D(Fluid,uv+ float2(float(i),float(j))*texelSize ).r;
 	            		ll = Linear01Depth(dd);
-                       //if(abs(LinearEyeDepth(tex2D(Fluid,uv+ float2(float(i),float(j))*texelSize ).r)-LinearEyeDepth(tex2D(Fluid,uv).r))<_zThreshold){
+                       if(abs(ll- l )<_zThreshold){
 	            		    factor = gaussProfile(abs(ll-l), _bsigma)*normalizationFactor*kernel[kSize+j]*kernel[kSize+i];
 	            		    Z += factor;
 	            		    nnn += factor*nn;
 	            		    ccc += factor*cc;
 	            		    ddd+= factor*dd;
-	            		//}
+	            		}
 	            	}
 	            	
 	            } 

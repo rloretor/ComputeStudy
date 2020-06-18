@@ -96,8 +96,8 @@ public class FlockingDrawController
         //Graphics.DrawMeshInstancedIndirect(BoidMesh, 0, BoidDrawMaterial, boidBounds, BufferWithArgs);
     }
 
-    public void CommandDraw(CommandBuffer command)
+    public void CommandDraw(CommandBuffer command,int pass = 0 )
     {
-        command.DrawMeshInstancedProcedural(boidMesh, 0, boidDrawMaterial, 0, boidModel.instances);
+        command.DrawMeshInstancedProcedural(boidMesh, 0, boidDrawMaterial, pass, boidModel.instances);
     }
 }

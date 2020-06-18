@@ -8,25 +8,9 @@
         Tags { "RenderType"="Opaque"}
         LOD 100
         ZWrite On
-        Pass
-        {
-            CGPROGRAM
-            #pragma vertex vert
-            #pragma fragment frag
-            #pragma target 4.5
-            #pragma  multi_compile_fwdbase
-            #pragma multi_compile_local __ ISBILLBOARD
-
-
-            #include "UnityCG.cginc"
-            #include "UnityCG.cginc"
-            #include "UnityLightingCommon.cginc"
-            #include "AutoLight.cginc"
-            
-            #define E 0.0000001
-
-            
-            struct BoidData{
+        
+        CGINCLUDE
+        struct BoidData{
                 float3 position;
                 float scale;
                 float3 velocity;
@@ -40,7 +24,7 @@
             struct appdata
             {
                 float4 vertex : POSITION;
-                float4 normal:NORMAL;
+                float3 normal:NORMAL;
                 float2 uv : TEXCOORD0;
                
             };
@@ -84,6 +68,17 @@
                 return frac(sin(q)*43758.5453);
             }
             
+        ENDCG
+        Pass
+        {
+            CGPROGRAM
+            #pragma vertex vert
+            #pragma fragment frag
+            #pragma target 4.5
+
+            #include "UnityCG.cginc"           
+            #define E 0.0000001
+
 
             struct Ellipsoid
             {
@@ -91,25 +86,14 @@
                 float3 rad;
             };
             
-
-
             #define Rot(a)  float2x2(cos(a), sin(a),-sin(a), cos(a))
             v2f vert (appdata v, uint instanceID : SV_InstanceID)
             {
                 v2f o;
                 BoidData boid = _BoidsBuffer[instanceID];
-               
-                #ifdef ISBILLBOARD
-                 float3 localSpaceCameraPos = mul(unity_WorldToObject, float4(_WorldSpaceCameraPos.xyz, 1));            
-                 float3 camVect = normalize(boid.position - localSpaceCameraPos);
-                 float4x4 rot =lookAtMatrix( v.vertex  - localSpaceCameraPos,float3(0,1,0));
-                 v.vertex.xyz*=(_SphereRadius*boid.scale+10);
-                 #else         
-                 float4x4 rot =lookAtMatrix( boid.velocity,float3(0,1,0));
-                 //  v.vertex.xy = mul(Rot(lerp(-45,45,boid.dummy)*0.01745329252),v.vertex.xy);
-                 o.N =  mul(rot,v.normal);
+                float4x4 rot =lookAtMatrix( boid.velocity,float3(0,1,0));
+                 o.N =  mul(rot,float4(v.normal,0)).xyz;
                  v.vertex.xyz*=(_SphereRadius*boid.scale);
-                #endif
                 v.vertex  = mul(rot,v.vertex);
                 v.vertex.xyz += boid.position;
                 
@@ -121,7 +105,93 @@
                 o.uv =v.uv;
                 return o;
             }
-            #ifdef ISBILLBOARD
+
+            half3 pal( in float t, in float3 a, in float3 b, in float3 c, in float3 d )
+            {
+                return a + b*cos( 6.28318*(c*t+d) );
+            }
+
+
+            f2r frag (v2f i) 
+            {
+                f2r o;
+                float2 uv =  i.uv *2 -1;
+                float3 N = normalize(i.N);                          
+                o.normal=   float4(N*0.5+0.5,1);//dot(N,L) ;
+                o.color =tex2D(  _colorPalette, float2(1-i.color.w,0));//dot(N,L) ;
+                return o;
+            }
+            ENDCG
+        }
+        
+        Pass
+        {
+            CGPROGRAM
+            #pragma vertex vert
+            #pragma fragment frag
+            #pragma target 4.5
+
+            #include "UnityCG.cginc"           
+            #define E 0.0000001
+
+
+            struct Ellipsoid
+            {
+                float3 cen;
+                float3 rad;
+            };
+            float4x4 _lightV;
+            #define Rot(a)  float2x2(cos(a), sin(a),-sin(a), cos(a))
+            v2f vert (appdata v, uint instanceID : SV_InstanceID)
+            {
+                v2f o;
+                BoidData boid = _BoidsBuffer[instanceID];
+                float4x4 rot =lookAtMatrix( boid.velocity,float3(0,1,0));
+                o.N =  mul(rot,float4(v.normal,0)).xyz;
+                v.vertex.xyz*=(_SphereRadius*boid.scale);
+                v.vertex  = mul(rot,v.vertex);
+                v.vertex.xyz += boid.position;
+                
+                o.wPos = v.vertex;
+                o.sphereWPos = boid.position;
+                o.rayD = (o.wPos -_WorldSpaceCameraPos.xyz);
+                o.color = float4(boid.velocity,boid.dummy);
+                o.vertex = mul(_lightV,v.vertex);
+                o.vertex = mul(UNITY_MATRIX_P,v.vertex);
+                o.uv =v.uv;
+                return o;
+            }
+
+            half3 pal( in float t, in float3 a, in float3 b, in float3 c, in float3 d )
+            {
+                return a + b*cos( 6.28318*(c*t+d) );
+            }
+
+
+            f2r frag (v2f i) 
+            {
+                f2r o;
+                float2 uv =  i.uv *2 -1;
+                float3 N = normalize(i.N);                          
+                o.normal=   float4(N*0.5+0.5,1);//dot(N,L) ;
+                o.color =tex2D(  _colorPalette, float2(1-i.color.w,0));//dot(N,L) ;
+                return o;
+            }
+            ENDCG
+        }
+    }
+}
+
+
+   /*
+   
+     #ifdef ISBILLBOARD
+                 float3 localSpaceCameraPos = mul(unity_WorldToObject, float4(_WorldSpaceCameraPos.xyz, 1));            
+                 float3 camVect = normalize(boid.position - localSpaceCameraPos);
+                 float4x4 rot =lookAtMatrix( v.vertex  - localSpaceCameraPos,float3(0,1,0));
+                 v.vertex.xyz*=(_SphereRadius*boid.scale+10);
+   
+               #ifdef ISBILLBOARD
            float sphere(float3 ray, float3 dir, float3 center, float radius)
             {
                 float3 rc = ray-center;
@@ -154,20 +224,6 @@
             }
          
             #endif
-            half3 pal( in float t, in float3 a, in float3 b, in float3 c, in float3 d )
-            {
-                return a + b*cos( 6.28318*(c*t+d) );
-            }
-
-            //#define BOIDPALETTE(p) pal( p,float3(0.5,0.5,0.5),float3(0.5,0.5,0.5),float3(1.0,1.0,0.5),float3(0.8,0.90,0.30) )
-            #define BOIDPALETTE(p)pal( p, float3(0.5,0.5,0.5),float3(0.5,0.5,0.5),float3(1.0,1.0,1.0),float3(0.0,0.10,0.20) )
-
-            f2r frag (v2f i) 
-            {
-                f2r o;
-                float2 uv =  i.uv *2 -1;
-                float3 N = normalize(i.N);
-                /*
                   #ifdef ISBILLBOARD
                     float3 D = normalize(i.rayD);
                    //Ellipsoid e;
@@ -184,12 +240,3 @@
                     o.depth = p.z/p.w;
                 #endif
                 */
-                
-                o.normal=   float4(N*0.5+0.5,1);//dot(N,L) ;
-                o.color =tex2D(  _colorPalette, float2(1-i.color.w,0));//dot(N,L) ;
-                return o;
-            }
-            ENDCG
-        }
-    }
-}

@@ -21,8 +21,11 @@ namespace Flocking
 
 
         private int fluidDepthID = Shader.PropertyToID("FluidDepth");
+        private int fluidLightDepthID = Shader.PropertyToID("FluidLightDepth");
         private int fluidNormalID = Shader.PropertyToID("FluidNormals");
         private int fluidColorID = Shader.PropertyToID("FluidColor");
+        private readonly int LightVMatrixId = Shader.PropertyToID("_lightV");
+
         RenderTargetIdentifier[] fluidRenderTargets;
 
 
@@ -86,7 +89,7 @@ namespace Flocking
             CommandBuffer commandBuffer = null;
             if (commandBufferMap.ContainsKey(cam))
             {
-                UpdateShaders();
+                UpdateShaders(commandBuffer);
                 return;
             }
 
@@ -117,6 +120,8 @@ namespace Flocking
             var rt = RenderTexture.active;
             commandBuffer.GetTemporaryRT(fluidDepthID, -1, -1, 32, FilterMode.Bilinear,
                 RenderTextureFormat.Depth);
+            commandBuffer.GetTemporaryRT(fluidLightDepthID, -1, -1, 32, FilterMode.Bilinear,
+                RenderTextureFormat.Depth);
             commandBuffer.GetTemporaryRT(fluidNormalID, -1, -1, 0, FilterMode.Bilinear,
                 RenderTextureFormat.Default);
             commandBuffer.GetTemporaryRT(fluidColorID, -1, -1, 0, FilterMode.Bilinear,
@@ -125,31 +130,54 @@ namespace Flocking
             commandBuffer.SetGlobalTexture("Fluid", fluidDepthID);
             commandBuffer.SetGlobalTexture("FluidNormals", fluidNormalID);
             commandBuffer.SetGlobalTexture("FluidColors", fluidColorID);
+            // commandBuffer.SetGlobalTexture("FluidLight", fluidLightDepthID);
+
             var rts = new RenderTargetIdentifier[] {fluidNormalID, fluidColorID};
+            commandBuffer.SetRenderTarget(rts, fluidLightDepthID);
+            UpdateShaders(commandBuffer);
+            // flockingCompute.Compute(commandBuffer, debug);
+            flockingDrawer.CommandDraw(commandBuffer, 1);
+            commandBuffer.ClearRenderTarget(true, true, Color.black);
+
             commandBuffer.SetRenderTarget(rts, fluidDepthID);
             //commandBuffer.SetRenderTarget(fluidDepthID);
             commandBuffer.ClearRenderTarget(true, true, Color.black);
-            UpdateShaders();
-            flockingCompute.Compute(commandBuffer, debug);
+            UpdateShaders(commandBuffer);
+            // flockingCompute.Compute(commandBuffer, debug);
             flockingDrawer.CommandDraw(commandBuffer);
-
+            //commandBuffer.ClearRenderTarget(true, true, Color.black);
+            //flockingDrawer.CommandDraw(commandBuffer);
             commandBuffer.ReleaseTemporaryRT(fluidDepthID);
             commandBuffer.ReleaseTemporaryRT(fluidNormalID);
-            //commandBuffer.SetRenderTarget(rt);
-            // commandBuffer.ClearRenderTarget(false, true, Color.black);
 
             commandBuffer.Blit(BuiltinRenderTextureType.CurrentActive, rt, FSQMat,
                 0);
             commandBuffer.SetRenderTarget(rt);
-            // commandBuffer.SetGlobalTexture("Fluid", BuiltinRenderTextureType.Depth);
-            // commandBuffer.Blit(BuiltinRenderTextureType.Depth, BuiltinRenderTextureType.CameraTarget, FSQMat, 1);
         }
 
-        private void UpdateShaders()
+        private void SetLightV(CommandBuffer buffer)
+        {
+            bool d3d = SystemInfo.graphicsDeviceVersion.IndexOf("Direct3D") > -1;
+            var V = mainLight.transform.worldToLocalMatrix;
+
+            if (d3d)
+            {
+                // Invert XY for rendering to a render texture
+                for (int i = 0; i < 4; i++)
+                {
+                    V[2, i] = -V[2, i];
+                }
+            }
+
+            buffer?.SetGlobalMatrix(LightVMatrixId, V);
+        }
+
+        private void UpdateShaders(CommandBuffer buffer)
         {
             flockingCompute.InitConstantBuffer();
             flockingDrawer.SetShader();
             FSQMat?.SetVector("_mainLightDir", mainLight.transform.forward);
+            SetLightV(buffer);
         }
 
         private void CleanNullCameras()
